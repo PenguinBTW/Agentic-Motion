@@ -97,6 +97,9 @@ export class FSPass {
     if (clear) renderer.clear();
     renderer.render(this.scene, this.cam);
   }
+  dispose() {
+    this.mat.dispose();
+  }
 }
 
 export type BlendMode = 'normal' | 'add' | 'screen' | 'multiply' | 'max' | 'replace';

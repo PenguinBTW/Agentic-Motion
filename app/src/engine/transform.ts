@@ -178,9 +178,20 @@ export class LayoutNode extends TransformNode {
   /**
    * Pins a 2D screen element to a 3D vertex in world space with depth scaling
    */
-  pinToWorldVertex(worldPos: V3, cam: THREE.Camera, opts: { screenOffset?: [number, number]; minScale?: number; maxScale?: number } = {}): this {
+  pinToWorldVertex(worldPos: V3, cam: THREE.Camera, opts: { screenOffset?: [number, number]; minScale?: number; maxScale?: number; occlusionCull?: boolean } = {}): this {
     const proj = ViewportSpace.worldToScreen(worldPos, cam);
     if (!proj) {
+      this.isPinned3D = false;
+      this.isOccluded = true;
+      return this;
+    }
+
+    let sx = proj[0] + (opts.screenOffset?.[0] ?? 0);
+    let sy = proj[1] + (opts.screenOffset?.[1] ?? 0);
+
+    // Screen-space frustum bounds check
+    const isOffscreen = sx < 0 || sx > W || sy < 0 || sy > H;
+    if (opts.occlusionCull && isOffscreen) {
       this.isPinned3D = false;
       this.isOccluded = true;
       return this;
@@ -190,11 +201,9 @@ export class LayoutNode extends TransformNode {
     this.isOccluded = false;
     this.pinnedWorldPos = worldPos;
 
-    let sx = proj[0] + (opts.screenOffset?.[0] ?? 0);
-    let sy = proj[1] + (opts.screenOffset?.[1] ?? 0);
-
+    const isOrtho = cam instanceof THREE.OrthographicCamera;
     const depthZ = Math.max(0.1, proj[2]);
-    let dScale = 5.0 / depthZ;
+    let dScale = isOrtho ? 1.0 : (5.0 / depthZ);
     if (opts.minScale) dScale = Math.max(opts.minScale, dScale);
     if (opts.maxScale) dScale = Math.min(opts.maxScale, dScale);
     this.depthScale = dScale;
@@ -205,7 +214,8 @@ export class LayoutNode extends TransformNode {
   }
 
   /**
-   * Resolves declarative viewport pin to screen coordinates (1920x1080)
+   * Resolves declarative viewport pin to screen coordinates (1920x1080),
+   * correctly bounding element dimensions and anchors to eliminate off-screen clipping.
    */
   resolveLayout(w = W, h = H): void {
     if (this.isPinned3D || !this.pin) return;
@@ -213,43 +223,45 @@ export class LayoutNode extends TransformNode {
     let x = 0, y = 0;
     const m = this.margin;
     const mt = m.top ?? 0, mr = m.right ?? 0, mb = m.bottom ?? 0, ml = m.left ?? 0;
+    const bw = this.size[0], bh = this.size[1];
+    const ax = this.anchor[0], ay = this.anchor[1];
 
     switch (this.pin) {
       case 'top-left':
-        x = ml;
-        y = mt;
+        x = ml + bw * ax;
+        y = mt + bh * ay;
         break;
       case 'top-center':
-        x = w / 2;
-        y = mt;
+        x = w / 2 - bw * (0.5 - ax);
+        y = mt + bh * ay;
         break;
       case 'top-right':
-        x = w - mr;
-        y = mt;
+        x = w - mr - bw * (1 - ax);
+        y = mt + bh * ay;
         break;
       case 'center-left':
-        x = ml;
-        y = h / 2;
+        x = ml + bw * ax;
+        y = h / 2 - bh * (0.5 - ay);
         break;
       case 'center':
-        x = w / 2;
-        y = h / 2;
+        x = w / 2 - bw * (0.5 - ax);
+        y = h / 2 - bh * (0.5 - ay);
         break;
       case 'center-right':
-        x = w - mr;
-        y = h / 2;
+        x = w - mr - bw * (1 - ax);
+        y = h / 2 - bh * (0.5 - ay);
         break;
       case 'bottom-left':
-        x = ml;
-        y = h - mb;
+        x = ml + bw * ax;
+        y = h - mb - bh * (1 - ay);
         break;
       case 'bottom-center':
-        x = w / 2;
-        y = h - mb;
+        x = w / 2 - bw * (0.5 - ax);
+        y = h - mb - bh * (1 - ay);
         break;
       case 'bottom-right':
-        x = w - mr;
-        y = h - mb;
+        x = w - mr - bw * (1 - ax);
+        y = h - mb - bh * (1 - ay);
         break;
     }
 

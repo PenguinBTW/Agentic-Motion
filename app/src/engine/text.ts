@@ -18,6 +18,8 @@ export interface TextStyle {
   align?: 'left' | 'center' | 'right';
 }
 
+export type KineticTextOptions = TextStyle;
+
 export type TextAnimationMotion = 'slide-up' | 'fade' | 'typewriter' | 'scale-pop' | 'wipe';
 
 export interface TextStaggerOpts {
@@ -69,6 +71,16 @@ export class KineticText {
       align: style.align ?? 'left',
     };
     this.lines = text.split('\n');
+  }
+
+  get text(): string {
+    return this.rawText;
+  }
+
+  setText(text: string): this {
+    this.rawText = text;
+    this.lines = text.split('\n');
+    return this;
   }
 
   /**

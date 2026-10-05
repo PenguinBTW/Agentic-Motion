@@ -22,7 +22,7 @@ export interface ParticleEmitterOpts {
 const VERT = /* glsl */ `
 precision highp float;
 
-in vec2 position;          // billboard quad corner [-1, 1]
+in vec3 position;          // billboard quad corner [-1, 1], z=0
 in vec3 iOrigin;           // particle base origin p0
 in vec3 iVelocity;         // particle initial velocity v0
 in vec2 iLifetime;         // [birthOffset, totalLifetime]
@@ -54,7 +54,7 @@ vec3 curlNoise(vec3 p, float t) {
 }
 
 void main() {
-  vUv = position;
+  vUv = position.xy;
   vColor = iColor;
 
   float birthOffset = iLifetime.x;
@@ -79,7 +79,7 @@ void main() {
   // Camera billboard expansion in view space
   vec4 viewPos = modelViewMatrix * vec4(p, 1.0);
   float radius = iSize.x;
-  viewPos.xy += position * radius;
+  viewPos.xy += position.xy * radius;
 
   gl_Position = projectionMatrix * viewPos;
 }
@@ -129,7 +129,7 @@ export class AnalyticalParticles {
   constructor(public readonly capacity = 4096, seed = 1337) {
     this.geo = new THREE.InstancedBufferGeometry();
 
-    // Quad covering [-1, 1] with z=0
+    // Quad covering [-1, 1] with z=0 and itemSize: 3 (eliminates boundingSphere NaN)
     const quadVertices = new Float32Array([
       -1, -1, 0,
        1, -1, 0,
@@ -153,7 +153,8 @@ export class AnalyticalParticles {
       new THREE.InstancedBufferAttribute(this.colorArr, 4),
       new THREE.InstancedBufferAttribute(this.sizeArr, 2),
     ];
-    this.attrs.forEach((a) => a.setUsage(THREE.DynamicDrawUsage));
+    // StaticDrawUsage: emitter configuration written once on CPU, never re-uploaded per frame
+    this.attrs.forEach((a) => a.setUsage(THREE.StaticDrawUsage));
 
     this.geo.setAttribute('iOrigin', this.attrs[0]!);
     this.geo.setAttribute('iVelocity', this.attrs[1]!);
@@ -187,10 +188,11 @@ export class AnalyticalParticles {
 
   clear(): void {
     this.count = 0;
+    this.geo.instanceCount = 0;
   }
 
   /**
-   * Add a procedural emitter with closed-form seed generation
+   * Add a procedural emitter with closed-form seed generation and direction-aligned velocity cone
    */
   addEmitter(id: string, opts: ParticleEmitterOpts = {}): this {
     const emitterCount = opts.capacity ?? 256;
@@ -203,6 +205,29 @@ export class AnalyticalParticles {
     const size = opts.size ?? 0.06;
     const col = opts.color ?? [1, 0.4, 0.1, 0.8];
     const glow = opts.glow ?? 1.5;
+
+    if (opts.gravity) {
+      (this.mat.uniforms.gravity.value as THREE.Vector3).set(opts.gravity[0], opts.gravity[1], opts.gravity[2]);
+    }
+
+    // Construct orthonormal frame around direction vector D
+    const dLen = Math.hypot(dir[0], dir[1], dir[2]) || 1.0;
+    const D: V3 = [dir[0] / dLen, dir[1] / dLen, dir[2] / dLen];
+    const upRef: V3 = Math.abs(D[1]) > 0.99 ? [1, 0, 0] : [0, 1, 0];
+
+    // R = norm(upRef x D)
+    const rx = upRef[1] * D[2] - upRef[2] * D[1];
+    const ry = upRef[2] * D[0] - upRef[0] * D[2];
+    const rz = upRef[0] * D[1] - upRef[1] * D[0];
+    const rLen = Math.hypot(rx, ry, rz) || 1.0;
+    const R: V3 = [rx / rLen, ry / rLen, rz / rLen];
+
+    // U = D x R
+    const U: V3 = [
+      D[1] * R[2] - D[2] * R[1],
+      D[2] * R[0] - D[0] * R[2],
+      D[0] * R[1] - D[1] * R[0],
+    ];
 
     for (let i = 0; i < emitterCount; i++) {
       if (this.count >= this.capacity) break;
@@ -218,12 +243,14 @@ export class AnalyticalParticles {
       this.originArr[idx * 3 + 1] = oy;
       this.originArr[idx * 3 + 2] = oz;
 
-      // Cone velocity
+      // Cone velocity rotated along direction D
       const theta = (Math.sin(i * 93.123) * 0.5 + 0.5) * spread;
       const phi = (Math.cos(i * 37.456) * 0.5 + 0.5) * Math.PI * 2;
-      const vx = dir[0] * speed + Math.sin(theta) * Math.cos(phi) * speed * 0.6;
-      const vy = dir[1] * speed + Math.cos(theta) * speed * 0.6;
-      const vz = dir[2] * speed + Math.sin(theta) * Math.sin(phi) * speed * 0.6;
+      const sinT = Math.sin(theta), cosT = Math.cos(theta);
+
+      const vx = (D[0] * cosT + (R[0] * Math.cos(phi) + U[0] * Math.sin(phi)) * sinT) * speed;
+      const vy = (D[1] * cosT + (R[1] * Math.cos(phi) + U[1] * Math.sin(phi)) * sinT) * speed;
+      const vz = (D[2] * cosT + (R[2] * Math.cos(phi) + U[2] * Math.sin(phi)) * sinT) * speed;
 
       this.velArr[idx * 3 + 0] = vx;
       this.velArr[idx * 3 + 1] = vy;
@@ -244,20 +271,37 @@ export class AnalyticalParticles {
       this.sizeArr[idx * 2 + 1] = turb;
     }
 
-    return this;
-  }
-
-  /**
-   * Render particles into target at time t. Enforces WebGL State Cache Invariant.
-   */
-  render(renderer: THREE.WebGLRenderer, cam: THREE.Camera, target: THREE.WebGLRenderTarget | null, t: number): void {
-    if (this.count === 0) return;
-
+    // Upload buffer data ONCE when emitter is added (prevents PCIe bandwidth saturation)
     for (const at of this.attrs) {
       at.needsUpdate = true;
       at.addUpdateRange(0, this.count * at.itemSize);
     }
     this.geo.instanceCount = this.count;
+
+    // Compute analytical bounding box and bounding sphere for Three.js culling
+    this.updateBounds(origin, speed, lifetime);
+
+    return this;
+  }
+
+  private updateBounds(origin: V3, speed: number, lifetime: number): void {
+    const maxRadius = speed * lifetime + 1.0;
+    this.geo.boundingSphere = new THREE.Sphere(
+      new THREE.Vector3(origin[0], origin[1], origin[2]),
+      maxRadius
+    );
+    this.geo.boundingBox = new THREE.Box3(
+      new THREE.Vector3(origin[0] - maxRadius, origin[1] - maxRadius, origin[2] - maxRadius),
+      new THREE.Vector3(origin[0] + maxRadius, origin[1] + maxRadius, origin[2] + maxRadius)
+    );
+  }
+
+  /**
+   * Render particles into target at time t. Enforces WebGL State Cache Invariant.
+   * Zero per-frame buffer uploads: only the temporal uniform advances.
+   */
+  render(renderer: THREE.WebGLRenderer, cam: THREE.Camera, target: THREE.WebGLRenderTarget | null, t: number): void {
+    if (this.count === 0) return;
 
     this.mat.uniforms.time.value = t;
 
@@ -266,8 +310,6 @@ export class AnalyticalParticles {
 
     // Enforce WebGL state cache invariant
     renderer.resetState();
-
-    for (const at of this.attrs) at.clearUpdateRanges();
   }
 
   dispose(): void {

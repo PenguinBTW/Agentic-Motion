@@ -1,7 +1,7 @@
 // Universal Dual-Mode 6-DOF Camera Rig (CameraRig)
 // Seamlessly handles Cinematic Perspective (14mm-200mm) and Technical Isometric projections.
 // Features centripetal Catmull-Rom arc-length splines, quaternion rotation interpolation,
-// Bishop parallel-transport basis, trauma-based procedural shake, and target tracking.
+// singular-safe orthonormal frames, analytical trauma-based procedural shake, and target tracking.
 import * as THREE from 'three';
 import { ViewportSpace } from './viewport';
 import { type V3, type Cam } from './camera3d';
@@ -11,17 +11,17 @@ import { W, H } from './gl';
 export type CameraMode = 'perspective' | 'isometric' | 'orthographic';
 
 export interface CameraWaypoint {
-  t: number;          // normalized trajectory progress [0..1]
-  pos: V3;            // camera position
-  target: V3;         // look-at target
-  roll?: number;      // roll angle in radians (default: 0)
-  focalLength?: number; // mm (35mm equivalent, default: 50mm) or px
+  t: number;            // normalized trajectory progress [0..1]
+  pos: V3;              // camera position
+  target: V3;           // look-at target
+  roll?: number;        // roll angle in radians (default: 0)
+  focalLength?: number; // mm (if < 300) or screen px (if >= 300)
 }
 
-export interface CameraShakeOpts {
-  amplitude?: number; // translational shake in world units (default: 0.08)
-  rotational?: number;// rotational shake in radians (default: 0.02)
-  decay?: number;     // trauma decay rate per second (default: 1.5)
+export interface TraumaImpulse {
+  t0: number;
+  intensity: number;
+  decay: number;
 }
 
 export class CameraRig {
@@ -31,13 +31,12 @@ export class CameraRig {
   position: V3 = [0, 1.8, -8.0];
   target: V3 = [0, 0, 0];
   roll = 0;
-  focalLengthMm = 50.0; // 35mm equivalent focal length
-  focalLengthPx = 950.0;
-  isoScale = 6.0;       // World units across screen for isometric mode
+  focalLengthMm = 50.0;                // 35mm equivalent focal length
+  focalLengthPx = 50.0 * (H / 24.0);   // Synchronized pixel equivalent (1080/24 = 45 px/mm)
+  isoScale = 6.0;                      // World units across screen for isometric mode
 
-  // Trauma-based shake engine (trauma in [0..1], displacement proportional to trauma^2)
-  private trauma = 0;
-  private traumaDecay = 1.5;
+  // Analytical closed-form trauma impulses (preserves f(t) sub-frame determinism)
+  private impulses: TraumaImpulse[] = [];
 
   // Arc-length parameterized spline waypoints
   private waypoints: CameraWaypoint[] = [];
@@ -53,8 +52,6 @@ export class CameraRig {
    */
   setLensMm(mm: number): this {
     this.focalLengthMm = mm;
-    // f_px = (H_px / sensor_height_mm) * focal_length_mm
-    // Standard: 1080px / 24mm = 45 px/mm
     this.focalLengthPx = mm * (H / 24.0);
     return this;
   }
@@ -77,11 +74,24 @@ export class CameraRig {
   }
 
   /**
-   * Inject trauma for physical impacts, recoil, or cinematic rumble
+   * Register a deterministic trauma impulse at timestamp t0 (decays exponentially)
    */
-  addTrauma(amount: number): this {
-    this.trauma = clamp(this.trauma + amount, 0, 1.0);
+  addTrauma(amount: number, t0 = 0, decay = 1.5): this {
+    this.impulses.push({ t0, intensity: amount, decay });
     return this;
+  }
+
+  /**
+   * Calculate continuous trauma amplitude at time t (strictly closed-form f(t))
+   */
+  getTraumaAt(t: number): number {
+    let total = 0;
+    for (const imp of this.impulses) {
+      if (t >= imp.t0) {
+        total += imp.intensity * Math.exp(-(t - imp.t0) * imp.decay);
+      }
+    }
+    return clamp(total, 0, 1.0);
   }
 
   /**
@@ -92,7 +102,6 @@ export class CameraRig {
     if (waypoints.length >= 2) {
       const posPoints = waypoints.map((w) => new THREE.Vector3(w.pos[0], w.pos[1], w.pos[2]));
       const targetPoints = waypoints.map((w) => new THREE.Vector3(w.target[0], w.target[1], w.target[2]));
-      // Centripetal Catmull-Rom prevents overshoot knots and speed kinks
       this.splinePos = new THREE.CatmullRomCurve3(posPoints, false, 'centripetal', 0.5);
       this.splineTarget = new THREE.CatmullRomCurve3(targetPoints, false, 'centripetal', 0.5);
     }
@@ -105,7 +114,6 @@ export class CameraRig {
   evalPath(u: number): this {
     const p = clamp(u, 0, 1);
     if (this.splinePos && this.splineTarget) {
-      // getPointAt uses arc-length reparameterization for uniform velocity
       const pos = this.splinePos.getPointAt(p);
       const tgt = this.splineTarget.getPointAt(p);
       this.position = [pos.x, pos.y, pos.z];
@@ -119,25 +127,27 @@ export class CameraRig {
         const span = Math.max(1e-4, w1.t - w0.t);
         const k = clamp((p - w0.t) / span, 0, 1);
         this.roll = (w0.roll ?? 0) * (1 - k) + (w1.roll ?? 0) * k;
-        if (w0.focalLength && w1.focalLength) {
-          const fl = w0.focalLength * (1 - k) + w1.focalLength * k;
-          if (fl < 100) this.setLensMm(fl);
-          else this.setFocalLengthPx(fl);
-        }
+
+        const fl0 = w0.focalLength ?? this.focalLengthMm;
+        const fl1 = w1.focalLength ?? fl0;
+        const fl = fl0 * (1 - k) + fl1 * k;
+
+        // Convention: < 300 is millimeters, >= 300 is screen pixels
+        if (fl < 300) this.setLensMm(fl);
+        else this.setFocalLengthPx(fl);
       }
     }
     return this;
   }
 
   /**
-   * Evaluate procedural shake and return orthonormal Cam specification
+   * Evaluate procedural shake and return orthonormal Cam specification.
+   * Completely deterministic closed-form f(t) across arbitrary sub-frame sampling.
    */
-  evalCam(t: number, dt = 1 / 60): Cam {
-    // Decay trauma over time
-    this.trauma = Math.max(0, this.trauma - this.traumaDecay * dt);
+  evalCam(t: number): Cam {
+    const traumaVal = this.getTraumaAt(t);
+    const shakePower = traumaVal * traumaVal;
 
-    // Quadratic trauma mapping (small trauma = subtle rumble, high trauma = violent kick)
-    const shakePower = this.trauma * this.trauma;
     let p = [...this.position] as V3;
     let roll = this.roll;
 
@@ -150,18 +160,24 @@ export class CameraRig {
       roll += noise1(t * 29.0, 104) * shakeRot;
     }
 
-    // Compute Forward vector towards target
+    // Compute Forward unit vector towards target
     const dx = this.target[0] - p[0];
     const dy = this.target[1] - p[1];
     const dz = this.target[2] - p[2];
     const len = Math.hypot(dx, dy, dz) || 1.0;
     const Fw: V3 = [dx / len, dy / len, dz / len];
 
-    // Orthonormal basis: world up is (0, 1, 0)
-    // R0 = vnorm(worldUp x Fw)
-    const rx = 1.0 * Fw[2] - 0.0 * Fw[1];
-    const ry = 0.0;
-    const rz = -1.0 * Fw[0];
+    // Singular-safe orthonormal basis:
+    // When gaze aligns with world Y (|Fw.y| > 0.99), fallback to Z-axis reference up
+    let upRef: V3 = [0, 1, 0];
+    if (Math.abs(Fw[1]) > 0.99) {
+      upRef = [0, 0, Fw[1] > 0 ? -1 : 1];
+    }
+
+    // R0 = vnorm(upRef x Fw)
+    const rx = upRef[1] * Fw[2] - upRef[2] * Fw[1];
+    const ry = upRef[2] * Fw[0] - upRef[0] * Fw[2];
+    const rz = upRef[0] * Fw[1] - upRef[1] * Fw[0];
     const rlen = Math.hypot(rx, ry, rz) || 1.0;
     const R0: V3 = [rx / rlen, ry / rlen, rz / rlen];
 

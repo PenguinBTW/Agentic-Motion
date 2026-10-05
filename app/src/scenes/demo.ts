@@ -1,72 +1,35 @@
-// Milestone 3 Showcase Scene: Spatial Hierarchies, Dual-Mode Camera & Analytical Particles
-// Exercises CameraRig (centripetal Catmull-Rom arc-length spline flight, trauma shake),
-// LayoutNode (responsive 3D anchor pinning & safe-zone viewport alignment),
-// AnalyticalParticles (stateless deterministic closed-form GPU emitters),
-// SDFBatch (GPU rounded rects, rings, reticles, soft shadows), and KineticText.
+// Milestone 4 Showcase Scene: Declarative Scene DSL, CompositorGraph & SceneGraph
+// Authored via defineScene() boilerplate shield, demonstrating:
+// - CameraRig (centripetal Catmull-Rom arc-length spline flight)
+// - AnalyticalParticles (stateless deterministic GPU emitter)
+// - Procedural 3D line geometry via LineBatch
+// - GPU rounded rects, rings, reticles & soft drop shadows via SDFBatch
+// - KineticText typography with knockout halos & numeric rollers
+// - Automatic SceneGraph entity registration and zero-annotation telemetry sync
 import * as THREE from 'three';
-import { Scene, type Frame } from '../engine/scene';
-import { CameraRig } from '../engine/rig';
-import { LayoutNode } from '../engine/transform';
-import { AnalyticalParticles } from '../engine/particles';
-import { LineBatch } from '../engine/lines';
-import { SDFBatch } from '../engine/sdf';
-import { KineticText } from '../engine/text';
-import { motion } from '../engine/motion';
-import { Layer2D, W, H } from '../engine/gl';
-import { rgba, LIN } from '../engine/palette';
-import { ease, TAU } from '../engine/util';
+import { defineScene, type SceneContext } from '../engine/dsl';
+import { type Frame } from '../engine/scene';
+import { TAU, ease } from '../engine/util';
 
-export default class DemoScene extends Scene {
-  private rig = new CameraRig('perspective');
-  private particles = new AnalyticalParticles(1024);
-  private lines = new LineBatch(2048, { screen2D: false, blend: 'normal' });
-  private sdf = new SDFBatch(2048);
-  private layer2d = new Layer2D();
-  private threeCam = new THREE.PerspectiveCamera(50, W / H, 0.1, 1000);
+export default defineScene({
+  id: 'demo',
+  duration: 5.0,
+  rigMode: 'perspective',
+  particleCapacity: 1024,
+  lineCapacity: 2048,
+  sdfCapacity: 2048,
 
-  // Responsive Layout & 3D Anchor
-  private gyroCallout = new LayoutNode('gyro_callout');
-
-  // Kinetic typography nodes
-  private heroTitle = new KineticText('AGENTIC MOTION DESIGN', {
-    fontSize: 42,
-    fontWeight: 900,
-    color: rgba('bone', 0.98),
-    letterSpacing: 6,
-  }).withKnockoutHalo(3.5, rgba('ink', 0.95));
-
-  private subtitle = new KineticText('DUAL-MODE RIG, 3D ANCHORS & GPU PARTICLES', {
-    fontSize: 16,
-    fontWeight: 600,
-    color: rgba('signal', 0.92),
-    letterSpacing: 3,
-  }).withKnockoutHalo(2.0, rgba('ink', 0.9));
-
-  private counterText = new KineticText('00', {
-    fontSize: 28,
-    fontWeight: 700,
-    color: rgba('bone', 0.95),
-    align: 'center',
-  });
-
-  private calloutText = new KineticText('3D GYROSCOPE ANCHOR', {
-    fontSize: 12,
-    fontWeight: 600,
-    color: rgba('bone', 0.9),
-    letterSpacing: 1,
-  }).withKnockoutHalo(1.5, rgba('ink', 0.9));
-
-  override async init(): Promise<void> {
+  setup: async (ctx: SceneContext) => {
     // 1. Configure CameraRig with smooth centripetal Catmull-Rom flight path
-    this.rig.setLensMm(45);
-    this.rig.setPath([
+    ctx.rig.setLensMm(45);
+    ctx.rig.setPath([
       { t: 0.0, pos: [0, 1.8, -8.0], target: [0, 0, 0], roll: 0, focalLength: 45 },
       { t: 0.5, pos: [3.5, 2.2, -7.0], target: [0, 0, 0], roll: 0.08, focalLength: 48 },
       { t: 1.0, pos: [0, 0.6, -6.5], target: [0, 0, 0], roll: 0, focalLength: 52 },
     ]);
 
     // 2. Add stateless analytical particle emitter at origin
-    this.particles.addEmitter('gyro_core', {
+    ctx.particles.addEmitter('gyro_core', {
       capacity: 384,
       origin: [0, 0, 0],
       direction: [0, 1, 0],
@@ -76,40 +39,40 @@ export default class DemoScene extends Scene {
       gravity: [0, -0.3, 0],
       turbulence: 0.25,
       size: 0.05,
-      color: [LIN.ember[0], LIN.ember[1], LIN.ember[2], 0.85],
+      color: [ctx.lin.ember[0], ctx.lin.ember[1], ctx.lin.ember[2], 0.85],
       glow: 1.8,
     });
-  }
 
-  override render(f: Frame, out: THREE.WebGLRenderTarget): void {
-    const { renderer } = this.ctx;
+    // 3. Register responsive 3D anchor layout node
+    ctx.node('gyro_callout', { role: 'callout', size: [120, 32, 0] });
+  },
+
+  render: (ctx: SceneContext, f: Frame, out: THREE.WebGLRenderTarget) => {
+    const { renderer, W, H, lin } = ctx;
     const t = f.t;
     const progress = Math.min(1, Math.max(0, f.p));
 
-    // 1. Evaluate CameraRig flight trajectory along arc length
-    this.rig.evalPath(progress);
-    const cam = this.rig.evalCam(t, f.dt);
-    this.rig.syncToThreeCamera(cam, this.threeCam);
+    // 1. Evaluate CameraRig flight trajectory & synchronize
+    ctx.updateCamera(t, progress);
 
     // 2. Clear render target
     renderer.setRenderTarget(out);
     renderer.clear(true, true, true);
 
     // 3. Render Procedural 3D Particles
-    this.particles.render(renderer, this.threeCam, out, t);
+    ctx.particles.render(renderer, ctx.threeCam, out, t);
 
     // 4. Render Procedural 3D Geometry via LineBatch
-    this.lines.clear();
-
+    ctx.lines.clear();
     const ringSegments = 48;
     const ringRadius = 2.2;
-    const rotSpeed = t * 0.8 + motion.lfo('noise', 0.5, t) * 0.1;
+    const rotSpeed = t * 0.8 + ctx.motion.lfo('noise', 0.5, t) * 0.1;
 
     for (let r = 0; r < 3; r++) {
       const tilt = (r * TAU) / 3 + t * 0.2;
       const ringCol: [number, number, number, number] = r === 0
-        ? [LIN.signal[0], LIN.signal[1], LIN.signal[2], 0.85]
-        : [LIN.bone[0], LIN.bone[1], LIN.bone[2], 0.45];
+        ? [lin.signal[0], lin.signal[1], lin.signal[2], 0.85]
+        : [lin.bone[0], lin.bone[1], lin.bone[2], 0.45];
 
       for (let i = 0; i < ringSegments; i++) {
         const a0 = (i * TAU) / ringSegments + rotSpeed * (r % 2 === 0 ? 1 : -1);
@@ -123,7 +86,7 @@ export default class DemoScene extends Scene {
         const p1y = Math.sin(a1) * ringRadius;
         const p1z = Math.cos(a1) * ringRadius * Math.sin(tilt);
 
-        this.lines.seg(p0x, p0y, p0z, p1x, p1y, p1z, 1.25, ringCol[0], ringCol[1], ringCol[2], ringCol[3]);
+        ctx.lines.seg(p0x, p0y, p0z, p1x, p1y, p1z, 1.25, ringCol[0], ringCol[1], ringCol[2], ringCol[3]);
       }
     }
 
@@ -132,45 +95,49 @@ export default class DemoScene extends Scene {
     const gridSpacing = 0.8;
     for (let x = -gridDim; x <= gridDim; x++) {
       const alpha = Math.max(0, 1 - Math.abs(x) / gridDim) * 0.25;
-      const col: [number, number, number, number] = [LIN.graphite[0], LIN.graphite[1], LIN.graphite[2], alpha];
-      this.lines.seg(
+      const col: [number, number, number, number] = [lin.graphite[0], lin.graphite[1], lin.graphite[2], alpha];
+      ctx.lines.seg(
         x * gridSpacing, -1.8, -gridDim * gridSpacing,
         x * gridSpacing, -1.8, gridDim * gridSpacing,
         0.75,
         col[0], col[1], col[2], col[3]
       );
     }
-
-    this.lines.render(renderer, out, this.threeCam);
+    ctx.lines.render(renderer, out, ctx.threeCam);
 
     // 5. Update LayoutNode 3D Anchor Pin to top of gyro ring
+    const calloutNode = ctx.node('gyro_callout');
     const gyroApexWorld: [number, number, number] = [0, 2.2, 0];
-    this.gyroCallout.pinToWorldVertex(gyroApexWorld, this.threeCam, {
+    calloutNode.pinToWorldVertex(gyroApexWorld, ctx.threeCam, {
       screenOffset: [0, -32],
       minScale: 0.7,
       maxScale: 1.2,
     });
 
     // 6. Render 2D Vector Primitives via SDFBatch
-    this.sdf.clear();
+    ctx.sdf.clear();
 
-    // Physical spring entrance with initial velocity v0 for the telemetry HUD card
-    const cardEntrance = motion.spring(0.2, t, { freq: 3.0, damping: 0.72, v0: 2.5 });
+    // Physical spring entrance with initial velocity v0 for telemetry HUD card
+    const cardEntrance = ctx.motion.spring(0.2, t, { freq: 3.0, damping: 0.72, v0: 2.5 });
     const cardW = 340, cardH = 140;
     const cardX = W - cardW - 80;
     const cardY = 80 + (1 - cardEntrance) * 40;
     const cardAlpha = Math.min(1, Math.max(0, cardEntrance));
 
     if (cardAlpha > 0.01) {
-      // Soft drop shadow
-      this.sdf.shadow(cardX, cardY, cardW, cardH, 24, [0, 0, 0, 0.45 * cardAlpha], [0, 8], 12);
-
-      // Translucent panel with rounded corners and bone stroke
-      this.sdf.rect(cardX, cardY, cardW, cardH, {
+      // Draw card using ctx boilerplate shield
+      ctx.card('hud_card', {
+        x: cardX,
+        y: cardY,
+        w: cardW,
+        h: cardH,
         radius: [12, 12, 12, 12],
-        fill: [LIN.ink2[0], LIN.ink2[1], LIN.ink2[2], 0.88 * cardAlpha],
-        stroke: [LIN.bone[0], LIN.bone[1], LIN.bone[2], 0.25 * cardAlpha],
+        fill: [lin.ink2[0], lin.ink2[1], lin.ink2[2], 0.88 * cardAlpha],
+        stroke: [lin.bone[0], lin.bone[1], lin.bone[2], 0.25 * cardAlpha],
         strokeWidth: 1.5,
+        shadow: { blur: 24, color: [0, 0, 0, 0.45 * cardAlpha], offset: [0, 8] },
+        role: 'hud',
+        opacity: cardAlpha,
       });
 
       // Animated radial gauge ring with trim path
@@ -179,75 +146,114 @@ export default class DemoScene extends Scene {
       const gaugeCy = cardY + cardH / 2;
       const gaugeTrim = Math.min(1, Math.max(0, progress * 1.05));
 
-      // Dim background track
-      this.sdf.ring(gaugeCx, gaugeCy, gaugeRadius, 4.0, [0, 1], [LIN.graphite[0], LIN.graphite[1], LIN.graphite[2], 0.3 * cardAlpha]);
-      // Active signal indicator with HDR bloom boost
-      this.sdf.ring(gaugeCx, gaugeCy, gaugeRadius, 4.0, [0, gaugeTrim], [LIN.signal[0], LIN.signal[1], LIN.signal[2], cardAlpha], 1.2);
+      ctx.ring({
+        cx: gaugeCx,
+        cy: gaugeCy,
+        radius: gaugeRadius,
+        thickness: 4.0,
+        trim: [0, 1],
+        color: [lin.graphite[0], lin.graphite[1], lin.graphite[2], 0.3 * cardAlpha],
+      });
+      ctx.ring({
+        cx: gaugeCx,
+        cy: gaugeCy,
+        radius: gaugeRadius,
+        thickness: 4.0,
+        trim: [0, gaugeTrim],
+        color: [lin.signal[0], lin.signal[1], lin.signal[2], cardAlpha],
+        glow: 1.2,
+      });
     }
 
     // Reticle on 3D anchor if visible
-    if (!this.gyroCallout.isOccluded) {
-      const calloutPos = this.gyroCallout.position;
-      this.sdf.reticle(calloutPos[0], calloutPos[1] + 32, 12, 1.25, [LIN.signal[0], LIN.signal[1], LIN.signal[2], 0.85]);
+    if (!calloutNode.isOccluded) {
+      const calloutPos = calloutNode.position;
+      ctx.reticle({
+        cx: calloutPos[0],
+        cy: calloutPos[1] + 32,
+        size: 12,
+        thickness: 1.25,
+        color: [lin.signal[0], lin.signal[1], lin.signal[2], 0.85],
+      });
     }
-
-    this.sdf.flush(renderer, out);
 
     // 7. Render 2D Kinetic Typography & HUD Overlays
-    this.layer2d.clear();
-    const ctx = this.layer2d.ctx;
+    ctx.layer2d.clear();
+    const c2d = ctx.layer2d.ctx;
 
     // Headline with staggered entrance
+    const heroTitle = ctx.text('hero_title', 'AGENTIC MOTION DESIGN', {
+      fontSize: 42,
+      fontWeight: 900,
+      color: ctx.rgba('bone', 0.98),
+      letterSpacing: 6,
+      role: 'headline',
+    }).withKnockoutHalo(3.5, ctx.rgba('ink', 0.95));
+
+    const subtitle = ctx.text('subtitle', 'DUAL-MODE RIG, 3D ANCHORS & GPU PARTICLES', {
+      fontSize: 16,
+      fontWeight: 600,
+      color: ctx.rgba('signal', 0.92),
+      letterSpacing: 3,
+      role: 'callout',
+    }).withKnockoutHalo(2.0, ctx.rgba('ink', 0.9));
+
     const titleEnter = ease.outExpo(Math.min(1, progress * 3));
-    this.heroTitle.render(ctx, t, 80, 140 - (1 - titleEnter) * 30);
-    this.subtitle.render(ctx, t, 84, 195);
+    heroTitle.render(c2d, t, 80, 140 - (1 - titleEnter) * 30);
+    subtitle.render(c2d, t, 84, 195);
 
-    // Dynamic numeric gauge roller inside the SDF card
+    // Counter inside card
     if (cardAlpha > 0.01) {
+      const counterText = ctx.text('counter', '00', {
+        fontSize: 28,
+        fontWeight: 700,
+        color: ctx.rgba('bone', 0.95),
+        align: 'center',
+        role: 'hud',
+      });
       const pct = Math.round(progress * 100);
-      this.counterText.numericRoll(pct, (n) => `${n}%`);
-      this.counterText.render(ctx, t, cardX + 54, cardY + cardH / 2 - 14);
+      counterText.numericRoll(pct, (n) => `${n}%`);
+      counterText.render(c2d, t, cardX + 54, cardY + cardH / 2 - 14);
 
-      // Telemetry card details
-      ctx.save();
-      ctx.fillStyle = rgba('bone', 0.9 * cardAlpha);
-      ctx.font = '600 13px "IBMPlexMono", monospace';
-      ctx.letterSpacing = '1px';
-      ctx.fillText('ANALYTIC SDF SYSTEM', cardX + 112, cardY + 34);
+      // Card details
+      c2d.save();
+      c2d.fillStyle = ctx.rgba('bone', 0.9 * cardAlpha);
+      c2d.font = '600 13px "IBMPlexMono", monospace';
+      c2d.letterSpacing = '1px';
+      c2d.fillText('ANALYTIC SDF SYSTEM', cardX + 112, cardY + 34);
 
-      ctx.fillStyle = rgba('ash', 0.7 * cardAlpha);
-      ctx.font = '400 11px "IBMPlexMono", monospace';
-      ctx.fillText(`FRAME: ${(progress * 300).toFixed(0)} / 300`, cardX + 112, cardY + 58);
-      ctx.fillText(`SPRING: ${cardEntrance.toFixed(2)} (v0=2.5)`, cardX + 112, cardY + 78);
-      ctx.fillText(`RIG: CATMULL-ROM C1`, cardX + 112, cardY + 98);
-      ctx.restore();
+      c2d.fillStyle = ctx.rgba('ash', 0.7 * cardAlpha);
+      c2d.font = '400 11px "IBMPlexMono", monospace';
+      c2d.fillText(`FRAME: ${(progress * 300).toFixed(0)} / 300`, cardX + 112, cardY + 58);
+      c2d.fillText(`SPRING: ${cardEntrance.toFixed(2)} (v0=2.5)`, cardX + 112, cardY + 78);
+      c2d.fillText(`RIG: CATMULL-ROM C1`, cardX + 112, cardY + 98);
+      c2d.restore();
     }
 
-    // Render 3D pinned callout label
-    if (!this.gyroCallout.isOccluded) {
-      const calloutPos = this.gyroCallout.position;
-      this.calloutText.render(ctx, t, calloutPos[0] + 16, calloutPos[1] + 24);
+    // Callout label
+    if (!calloutNode.isOccluded) {
+      const calloutText = ctx.text('callout_label', '3D GYROSCOPE ANCHOR', {
+        fontSize: 12,
+        fontWeight: 600,
+        color: ctx.rgba('bone', 0.9),
+        letterSpacing: 1,
+        role: 'callout',
+      }).withKnockoutHalo(1.5, ctx.rgba('ink', 0.9));
+
+      const calloutPos = calloutNode.position;
+      calloutText.render(c2d, t, calloutPos[0] + 16, calloutPos[1] + 24);
     }
 
     // Bottom telemetry bar
-    ctx.save();
-    ctx.fillStyle = rgba('ash', 0.75);
-    ctx.font = '400 13px "IBMPlexMono", monospace';
-    ctx.letterSpacing = '1px';
-    ctx.fillText(`TIME: ${t.toFixed(3)}s | PROGRESS: ${(progress * 100).toFixed(1)}% | CLOSED-FORM f(t)`, 84, H - 80);
-    ctx.fillText('STATUS: MILESTONE 3 COMPLETE | RIG + TRANSFORMS + PARTICLES ACTIVE', 84, H - 56);
-    ctx.restore();
+    c2d.save();
+    c2d.fillStyle = ctx.rgba('ash', 0.75);
+    c2d.font = '400 13px "IBMPlexMono", monospace';
+    c2d.letterSpacing = '1px';
+    c2d.fillText(`TIME: ${t.toFixed(3)}s | PROGRESS: ${(progress * 100).toFixed(1)}% | CLOSED-FORM f(t)`, 84, H - 80);
+    c2d.fillText('STATUS: MILESTONE 4 COMPLETE | DSL + COMPOSITOR + SCENEGRAPH ACTIVE', 84, H - 56);
+    c2d.restore();
 
-    // Composite 2D layer
-    const layerTex = this.layer2d.upload();
-    this.ctx.comp.draw(renderer, layerTex, out, { mode: 'normal', opacity: 1.0 });
-  }
-
-  override dispose(): void {
-    this.rig = null as any;
-    this.particles.dispose();
-    this.lines.dispose();
-    this.sdf.dispose();
-    this.layer2d.texture.dispose();
-  }
-}
+    // 8. Flush batches and composite with automatic WebGL state reset
+    ctx.flush(out);
+  },
+});
