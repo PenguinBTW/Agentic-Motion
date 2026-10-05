@@ -1,24 +1,40 @@
-# The 4 Core Visual Diagnostic Instruments
+# Visual Diagnostic Instruments: Ideas & Roadmap Catalog
 
-This directory contains technical architectural specifications for the **4 approved visual diagnostic instruments** of the Agentic Motion Design Engine.
+This directory contains architectural specifications and design proposals for **future diagnostic instruments (05–09)** in the Agentic Motion Design Engine suite.
 
-These tools replace arbitrary mathematical scorecards and scalar verdicts with **interpretable visual blueprints, multi-exposure motion trails, side-by-side design system benchmark anchors, and transition seam overlays** across any procedural motion graphic design domain—commercial product reveals, UI/UX interaction showcases, kinetic typography manifestos, data visualizations, and audiovisual productions.
-
----
-
-## The 4 Approved Visual Instruments
-
-| Instrument | CLI Command | Core Visual Output | Problem It Solves Across Motion Graphics |
-| :--- | :--- | :--- | :--- |
-| [**01. 3D God-View Camera Blueprint**](./01-godview-camera-blueprint.md) | `bun scripts/godview.ts`<br>`bun scripts/render.ts godview` | `cam_godview.png`<br>`godview_summary.json` | **3D spatial blindness & frustum clipping**: Shows top-down ($XZ$) and side elevation ($YZ$) architectural blueprints of scene geometry, hero subjects, camera flight paths, frustum cones, and velocity ribbons. Prevents near-plane clipping, camera collisions, and orientation drift in product orbits, architectural fly-throughs, and 3D UI layers. |
-| [**02. Multi-Exposure Motion Onion**](./02-multi-exposure-motion-onion.md) | `bun scripts/onion.ts`<br>`bun scripts/render.ts onion` | `onion_motion.png`<br>`onion_summary.json` | **Camera tremors, spring overshoot & easing breaks**: Collapses a $0.5\text{–}1.5\,\text{s}$ animation window into a single chromatic ghost trail (cyan $\to$ natural $\to$ amber), instantly exposing camera micro-tremors, physical spring oscillation damping, vector morph glitches, and kinetic typography deceleration on a single still without video playback. |
-| [**03. Visual A/B Reference Anchor**](./03-visual-ab-reference-anchor.md) | `bun scripts/compare.ts`<br>`bun scripts/render.ts compare` | `ab_side_by_side.png`<br>`ab_split_wipe.png`<br>`ab_comparison.json` | **Aesthetic drift vs Design Tokens & Figma Mockups**: Automated side-by-side and $45^\circ$ diagonal split-wipe contact sheets directly comparing typography scale, stroke weight, negative space ratio, and color gamut against Figma keyframes, brand guidelines, or reference animation plates. |
-| [**04. Transition Seam Stitch Inspector**](./04-transition-seam-stitch-inspector.md) | `bun scripts/stitch.ts`<br>`bun scripts/render.ts stitch` | `onion_seam.png`<br>`strip_seam.png`<br>`stitch_summary.json` | **Scene handoff & UI state teleportation**: Overlays exit frame $N-1$ (translucent green) and entry frame $N$ (translucent magenta) across cut boundaries ($\pm 250\,\text{ms}$) to verify carrier geometry alignment (UI cards, logos, focal anchors), velocity continuity, and horizon stability. |
+The initial four instruments (**01–04**) are **already fully implemented** in [`app/scripts/visual/`](../app/scripts/visual/) and have graduated from ideas to active tooling documentation in [`tooling documentation/`](../tooling%20documentation/).
 
 ---
 
-## Architectural Principles
-1. **Modular Engine Architecture**: All tool implementations are fully separated into modular standalone files under `app/scripts/visual/` (`godview.ts`, `onion.ts`, `compare.ts`, `stitch.ts`), keeping the core `render.ts` lightweight and unbloated.
+## 1. Implemented Diagnostic Instruments (Active Tooling)
+
+The following four instruments are operational in the engine. Detailed user guides and CLI usage are documented in [`tooling documentation/`](../tooling%20documentation/):
+
+| Instrument | Status | Operational Guide | Core Artifacts | Primary Role |
+| :--- | :---: | :--- | :--- | :--- |
+| **01. 3D God-View Camera Blueprint** | **Implemented** | [01-godview-camera-blueprint.md](../tooling%20documentation/01-godview-camera-blueprint.md) | `cam_godview.png`<br>`godview_summary.json` | External $XZ$/$YZ$ architectural blueprints with flight ribbons & viewing cones. |
+| **02. Multi-Exposure Motion Onion** | **Implemented** | [02-multi-exposure-motion-onion.md](../tooling%20documentation/02-multi-exposure-motion-onion.md) | `onion_motion.png`<br>`onion_summary.json` | Chromatic temporal motion trails (cyan $\to$ natural $\to$ amber) on a single still. |
+| **03. Visual A/B Reference Anchor** | **Implemented** | [03-visual-ab-reference-anchor.md](../tooling%20documentation/03-visual-ab-reference-anchor.md) | `ab_side_by_side.png`<br>`ab_split_wipe.png` | Side-by-side & $45^\circ$ diagonal split-wipe benchmarking against Figma & design tokens. |
+| **04. Transition Seam Stitch Inspector** | **Implemented** | [04-transition-seam-stitch-inspector.md](../tooling%20documentation/04-transition-seam-stitch-inspector.md) | `onion_seam.png`<br>`strip_seam.png` | Green/magenta false-color overlay & 10-frame filmstrip across scene cut boundaries ($\pm 250\text{ms}$). |
+
+---
+
+## 2. Proposed Diagnostic Instruments (Ideas & Roadmap Specs)
+
+The following specifications define the next generation of diagnostic instruments planned for implementation:
+
+| Instrument | Planned Command | Proposal Document | Core Visual Output | Problem It Solves Across Motion Graphics |
+| :--- | :--- | :--- | :--- | :--- |
+| **05. Parametric Speed Graph Inspector** | `bun scripts/curves.ts` | [05-parametric-motion-curve-speed-graph.md](./05-parametric-motion-curve-speed-graph.md) | `curve_speedgraph.png`<br>`curves_summary.json` | **Kinematic tangent kinks & arrival shock**: Replicates the classic NLE Speed Graph editor, plotting value curves $y(t)$ alongside physical speed $v(t)$ and acceleration $a(t)$ to flag $C^0$ tangent breaks, inflection flaws, and non-zero arrival impacts. |
+| **06. Visual Gaze Saliency Heatmap** | `bun scripts/saliency.ts` | [06-visual-gaze-saliency-attention-heatmap.md](./06-visual-gaze-saliency-attention-heatmap.md) | `saliency_heatmap.png`<br>`saliency_summary.json` | **Perceptual attention hijacking**: Computes spatio-temporal saliency (contrast, color, optical flow) to render a thermal gaze heatmap and rank Top-3 focal anchors, confirming the hero subject captures $> 65\%$ attention share. |
+| **07. Dynamic Contrast & Legibility Inspector** | `bun scripts/legibility.ts` | [07-dynamic-contrast-legibility-inspector.md](./07-dynamic-contrast-legibility-inspector.md) | `legibility_washout.png`<br>`legibility_summary.json` | **Dynamic background washout during camera transit**: Tracks local WCAG contrast behind typography glyphs over time, flagging temporary dropouts ($< 4.5:1$) caused by moving 3D geometry, lighting passes, or specular reflections. |
+| **08. Choreography Gantt & Stagger Visualizer** | `bun scripts/rhythm.ts` | [08-choreography-gantt-stagger-rhythm.md](./08-choreography-gantt-stagger-rhythm.md) | `choreography_gantt.png`<br>`rhythm_summary.json` | **Ensemble timing & stagger orchestration**: Multi-track visual motion Gantt chart displaying entrance ease, dwell hold, and exit phase for every scene entity, revealing simultaneous onset traffic jams and stagger cascade regularity. |
+| **09. Multi-Aspect Responsive Framing Inspector** | `bun scripts/framing.ts` | [09-multi-aspect-responsive-framing.md](./09-multi-aspect-responsive-framing.md) | `framing_multiaspect.png`<br>`framing_summary.json` | **Cross-platform safe-zone truncation**: Generates a synchronized $2 \times 2$ contact plate auditing 16:9 Landscape, 9:16 Vertical (Reels/TikTok), and 1:1 Square (feeds) simultaneously to detect cropped callouts and dead space. |
+
+---
+
+## 3. Architectural Design Invariants
+
+1. **Strict Modular Architecture**: All tool implementations live in isolated modules under `app/scripts/visual/`. The master `render.ts` CLI dynamically dispatches to each tool.
 2. **Zero Native C++ Dependencies**: Powered strictly by Bun, TypeScript, Playwright canvas readbacks, and HTML5 Canvas2D/WebGL blending modes.
-3. **Evidence Over Verdicts**: Factual visual diagrams and empirical percentiles instead of arbitrary PASS/FAIL scorecards.
-4. **Fast Headless CI Execution**: Micro-runners execute on single scenes in under 2–6 seconds, enabling rapid autonomous agent feedback loops.
+3. **Machine-Actionable Directives**: Every diagnostic tool pairs its visual `.png` artifact with structured `.json` telemetry that emits actionable remediation advice for autonomous coding agents.

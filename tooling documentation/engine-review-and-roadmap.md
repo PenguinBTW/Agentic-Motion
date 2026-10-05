@@ -1,6 +1,6 @@
 # Engine Architectural Review & Universal Agentic Motion Graphics Roadmap
 
-**Document Version**: 2.1.0  
+**Document Version**: 2.4.0  
 **Scope**: Universal Agentic Motion Graphics & Animation Platform — applicable to **all motion graphic design genres**:
 * **Commercials & 3D Product Teasers** (device turntable reveals, screen cascades, exploded engineering assemblies)
 * **UI/UX Animation & Interaction Showcases** (app walkthroughs, sheet transitions, micro-interactions, isometric UI flows)
@@ -17,19 +17,14 @@ Motion graphics is the craft of applying **time, physics, and choreography to gr
 
 For an **autonomous AI coding agent**, this workflow is fundamentally different:
 * The agent authors motion through code, shaders, analytical math, and declarative timing curves.
-* The agent cannot "eyeball" a timeline by dragging a scrubber; it relies on **headless visual telemetry, multi-exposure motion trails, 3D architectural blueprints, split-wipe benchmark comparators, and semantic scene introspection**.
+* The agent cannot "eyeball" a timeline by dragging a scrubber; it relies on **headless visual telemetry, multi-exposure motion trails, 3D architectural blueprints, speed graphs, attention heatmaps, split-wipe benchmark comparators, and semantic scene introspection**.
 
-The current engine provides an extraordinary foundation: **deterministic rendering $f(t)$, 60 fps headless Playwright capture, adaptive sub-frame motion blur, linear HDR optical post-processing, and high-performance GPU line batching**.
+The current engine provides an extraordinary foundation: **deterministic rendering $f(t)$, 60 fps headless Playwright capture, adaptive sub-frame motion blur (1 to 324 spp), linear HDR optical post-processing, and high-performance GPU line batching**.
 
-However, to serve as a **general-purpose engine for any motion graphic design or animation project**, the engine must eliminate single-project assumptions (such as treating all text as sung lyrics or assuming all timelines are driven by musical beats). It must provide universal motion primitives:
-1. **Transform hierarchies with anchor-point parenting**
-2. **Procedural vector shapes with trim paths and SVG support**
-3. **Universal kinetic typography with character/word staggers**
-4. **Declarative motion curves, physical springs, and multi-source modulation (speech, SFX, LFOs, silent clocks)**
-5. **GPU instanced particles and field emitters**
-6. **Multi-track compositing with alpha/luma track mattes and multi-aspect ratio viewports**
-7. **Semantic scene graphs with VLM introspection**
-8. **Multi-format headless export pipelines (transparent WebM, ProRes, MP4)**
+However, our deep architectural audit reveals that before this engine can power general motion graphics, it must resolve **three critical layers**:
+1. **Engine Decoupling**: Eliminate single-project assumptions (such as engine crashes if `audio.json` or `lyrics.json` is missing, hardcoded `pdoom` HUD regexes, and `alpha: false` WebGL contexts).
+2. **Low-Level Graphics Plumbing**: Implement analytic GPU Signed Distance Fields (`SDFBatch`) for vector shapes, closed-form stateless particles (`AnalyticalParticles`) that stay deterministic under adaptive sampling, Rotation Minimizing Frames (Bishop frames) for camera flight, and dual-texture GLSL track mattes.
+3. **Agent Directorial Loop**: Couple the 9 visual diagnostic instruments directly to a semantic scene graph to provide autonomous self-correction instructions.
 
 ---
 
@@ -43,43 +38,48 @@ However, to serve as a **general-purpose engine for any motion graphic design or
 2. **True Cinematic Sub-Frame Motion Blur**: The adaptive ternary sampling engine (`Engine.render`, 1 to 324 sub-frames) provides physically accurate motion blur, shutter simulation, and anti-aliasing without ghosting or temporal stepping.
 3. **Linear HDR Optical Post-Processing**: 7-mip bloom pyramid, tone shoulder, halation, subtle chromatic aberration, film grain, and paper/ink inversion provide a cohesive, filmic baseline look out-of-the-box.
 4. **High-Throughput GPU Capsule Lines (`LineBatch`)**: Instanced buffer geometry capable of rendering tens of thousands of anti-aliased 2D/3D lines per frame with screen-space or world-scale width.
-5. **Integrated Visual Instrumentation**: The 4 visual diagnostic instruments (`onion`, `godview`, `compare`, `stitch`) and 3-tier telemetry suite provide immediate perceptual sight into motion, layout, and timing.
+5. **Integrated Visual Instrumentation Suite (01–09)**: 9 visual diagnostic instruments (`onion`, `godview`, `compare`, `stitch`, `curves`, `saliency`, `legibility`, `rhythm`, `framing`) providing perceptual sight across spatial, temporal, and aesthetic domains.
 
-### 2.2 Critical Limitations for General-Purpose Motion Graphics
+### 2.2 Critical Codebase Decoupling Blockers & Graphics Bottlenecks
 
-| Dimension | Current Implementation | Limitation for General Motion Design |
+| Issue / Area | Current Codebase Implementation | Impact on General Motion Design |
 | :--- | :--- | :--- |
-| **1. Transform Hierarchy & Parenting** | Flat coordinate calculations. No parent-child matrix transforms or anchor points. | Building compound animated objects (e.g. an animated phone with floating UI layers, a robotic arm, a rotating logo with orbiting satellites) requires tedious manual trigonometric calculations for every child element. |
-| **2. Viewport & Aspect Ratios** | Hardcoded to 16:9 (`1920x1080` logical resolution). | Modern motion graphics require multi-aspect delivery: **9:16 vertical** (mobile/social/Reels), **1:1 square** (feeds), and **21:9 ultrawide** (cinematic). |
-| **3. Vector Shapes & Primitives** | Only capsule line segments (`LineBatch`) and raw WebGL shaders (`FSPass`). | Motion design essentials—**filled rounded rectangles, trim paths, stroke offsets, polygon morphing, animated pie charts, starbursts, SVG import**—have no native engine primitives. |
-| **4. Kinetic Typography Scope** | Tied to song lyric timestamps and word-level audio synchronization. | In general motion graphics, typography includes **brand headlines, feature callouts, data counters, lower thirds, speech transcripts, and editorial quotes** with character/word staggers. |
-| **5. Timing & Trigger Sources** | Relies on an audio JSON dataset (`beats`, `downbeats`, `kicks`). | Many motion graphics projects are **silent loops (e.g. 5s logo resolves, UI teasers, looping trade-show backgrounds)** or driven by **speech voiceover transcripts and SFX cues** without musical beats. |
-| **6. Compositing & Track Mattes** | Basic sequential scene switching with simple crossfade. | Cannot perform **track mattes** (alpha mattes, luma mattes, stencil reveals) or stack persistent global overlays (brand watermarks, technical HUDs, letterboxes) across scenes. |
-| **7. Particles & Ambient Physics** | No particle engine. Lines and meshes must be simulated manually in JS. | Ambient dust motes, sparks on impact, confetti bursts, matrix digital rain, and floating UI orbs require custom per-frame loops. |
-| **8. Semantic Scene Graph** | Black-box WebGL draw calls; text scraped via Canvas2D hooks. | Diagnostic tools cannot distinguish between a foreground UI card and a background 3D wall, producing false-positive collision and clipping alerts. |
+| **Boot Crash on Missing Audio** | `engine.ts:146` literally awaits `AudioData.load()` and `Lyrics.load()`. | If `audio.json` or `lyrics.json` is absent, the engine crashes on boot. Silent 5s UI teasers or procedural loops cannot run. |
+| **WebGL Alpha Disabled** | `engine.ts:92` initializes `THREE.WebGLRenderer({ alpha: false })`. | Transparent WebM exports (VP9 with alpha for Lottie/web UI embeds) are impossible. Background defaults to opaque black. |
+| **Hardcoded Legacy Constants** | `hud.ts` has regex on `/p[-(\s]?doom/i`; `palette.ts` hardcodes `signal` / `acid` descriptions; `timeline.ts` imports missing `plates.json`. | Prevents clean project reuse; pollutes new projects with single-project metadata. |
+| **4K Canvas2D PCIe Saturation** | Canvas2D renders to `Layer2D`, which uploads to WebGL via `texImage2D` every frame. | At 4K (`3840x2160`), uploading an uncompressed 32-bit RGBA surface ($33.2\,\text{MB}$) per frame takes **$8\text{--}16\,\text{ms}$**, saturating PCIe bandwidth. |
+| **WebGL State Desynchronization** | Raw GL calls in `LineBatch` / `gl.ts` mutate VAO, blend modes, and buffers without resetting state. | Desynchronizes Three.js internal `WebGLState` cache, causing random line dropouts, depth-test failures, or corrupted post shaders. |
+| **Async Font Ready Race Condition** | `engine.init()` starts rendering without gating on `@font-face` loading. | Frame 0 renders with system fallback fonts (flash of unstyled text) and returns 0-width metrics, corrupting `text.csv` and triggering false `F04`/`F05` flags. |
+| **Coordinate Space Ambiguity** | Mixes Logical ($1920 \times 1080$), High-DPI physical ($3840 \times 2160$), and Three.js world units without unified scaling. | Causes $2\times$ sizing bugs, misplaced safe-zone clipping borders, and desynchronized 2D callouts over 3D anchors. |
+| **Camera Duality Disconnect** | `camera3d.ts` computes custom CPU pinhole math (`Cam`); `lines.ts` uses Three.js `projectionMatrix * modelViewMatrix`. | Forces developers to choose between slow CPU coordinate projection or maintaining two desynchronized camera rigs. |
+| **Particle Simulation vs. Blur** | Forward Euler simulation ($p_{t+dt} = p_t + v \cdot dt$) breaks under adaptive sampling. | Adaptive motion blur samples sub-frames out of chronological order. Stateful particles require expensive simulation preroll. |
+| **Single-Texture Compositor** | `gl.ts` only draws single textures with basic blend modes (`normal`, `add`, `screen`). | Cannot perform **track mattes** (alpha mattes, luma mattes, stencil reveals) or isolate bloom from UI text. |
 
 ---
 
 ## 3. The Universal Agentic Motion Graphics Architecture
 
-To transform this foundation into a universal platform for any motion design genre, the engine is structured around nine modular subsystems:
+To transform this foundation into a universal platform for any motion design genre, the engine is structured around eleven modular subsystems:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│            UNIVERSAL AGENTIC MOTION GRAPHICS ENGINE                    │
+│            UNIVERSAL AGENTIC MOTION GRAPHICS ENGINE (v2.2.0)           │
 ├────────────────────────────────────────────────────────────────────────┤
-│  [8. Semantic Scene Graph]  ──> Entities, Roles, Bounding Volumes, HUD │
+│  [11. Agent Director Loop]  ──> Machine-Actionable Remediation Engine   │
 ├────────────────────────────────────────────────────────────────────────┤
-│  [3. Kinetic Typography]    ──> Titles, Callouts, Data Counters, Outlines│
-│  [4. Procedural Vector 2D]  ──> Filled Shapes, Trim Paths, SVG, Morphs  │
-│  [6. GPU Particle Engine]   ──> Sparks, Confetti, Ambient Dust, Fields │
-│  [5. Universal Motion Bus]  ──> Springs, Bezier Curves, Speech, LFOs   │
-│  [1. Continuous Camera Rig] ──> C2 Splines, Lens Presets, LookAt, Orbit│
-│  [2. Transform Hierarchy]   ──> Anchor Points, Parent Matrices, TRS    │
+│  [8. Semantic Scene Graph]  ──> Auto-Projected Bounds, Semantic Roles  │
 ├────────────────────────────────────────────────────────────────────────┤
-│  [7. Multi-Track Compositor]──> Track Mattes, Stencils, Multi-Aspect   │
+│  [3. Kinetic Typography]    ──> Staggers, Numeric Rollers, Knockout Halos│
+│  [4. Analytic GPU SDFs]     ──> SDFBatch: Rounded Rects, Rings, Trim Paths│
+│  [6. Stateless GPU Particles]─> Closed-Form Deterministic Emitters      │
+│  [5. Universal Motion Bus]  ──> Springs (v0), Bezier Curves, Drivers   │
+│  [1. Continuous Camera Rig] ──> Bishop Frames, C2 Splines, Lens Presets │
+│  [2. Transform & Layout]    ──> 3D Anchors, LayoutNode Responsive Pins │
+│  [10. Pluggable DesignTokens]─> Brand Palettes, Typography & Motion Tokens│
 ├────────────────────────────────────────────────────────────────────────┤
-│  [9. Multi-Format Exporter] ──> Alpha WebM, ProRes, MP4, Stills, CSVs │
+│  [7. Dual-Texture Compositor]─> Alpha/Luma Track Mattes, Scoped Post   │
+├────────────────────────────────────────────────────────────────────────┤
+│  [9. Multi-Format Exporter] ──> Alpha WebM, ProRes 422 HQ, MP4, Stills │
 ├────────────────────────────────────────────────────────────────────────┤
 │  [Core Engine Foundations]  ──> Adaptive Sub-Sampler, Post, WebGL/GPU  │
 └────────────────────────────────────────────────────────────────────────┘
@@ -89,21 +89,28 @@ To transform this foundation into a universal platform for any motion design gen
 
 ### Module 1: Continuous $C^2$ Camera Choreography Rig (`CameraRig`)
 
-#### Scope Across Motion Graphics
-* **Product Teasers**: Smooth $360^\circ$ turntable orbits around a 3D gadget, zooming into specific ports or lenses.
-* **UI/UX Showcases**: Isometric tilt down onto an app screen, dollying diagonally across feature cards.
-* **Brand Ident Sequences**: Sweeping low-angle fly-by around an extruded metallic logo.
-* **Architectural & Data Walkthroughs**: Seamless glide through 3D wireframe corridors or node clusters.
+#### Architecture, Gimbal Fix & Dual-Mode Projections
+To eliminate camera roll flips when the gaze vector aligns with world up ($\vec{F} \parallel [0, 1, 0]$), `CameraRig` adopts **Rotation Minimizing Frames (Bishop Frames)** combined with **Spherical Quadrangle (SQUAD)** quaternion interpolation and **arc-length reparameterized** Centripetal Catmull-Rom positional splines:
 
-#### Architecture
-The `CameraRig` eliminates piecewise acceleration breaks by computing **$C^2$ continuous Centripetal Hermite or Catmull-Rom splines** through 3D waypoints:
+$$s(t) = \int_0^t \|\gamma'(\tau)\| d\tau, \quad \tilde{\gamma}(u) = \gamma(s^{-1}(u \cdot L))$$
+
+* **$O(1)$ Random-Access Evaluation**: Because Bishop parallel transport is path-dependent ($\dot{u}(s) = -(\kappa(s) \cdot u(s))T(s)$), naive forward numerical integration from $t=0$ creates an $O(N)$ penalty during scrubbing or headless frame seeking. `CameraRig` solves this by precomputing an analytical arc-length lookup table and utilizing keyframed SQUAD quaternion orientation, guaranteeing instant $O(1)$ evaluation at any arbitrary time $t$.
+* **Dual-Mode Projections (Perspective & Isometric)**: Modern UI/UX showcases, technical infographics, and exploded assemblies often require isometric / axonometric projection ($30^\circ$ isometric app flows) to eliminate perspective distortion across 3D card stacks.
+* **Camera Duality Reconciliation**: Unifies Three.js vertical FOV ($\text{fov}_y$) with pinhole screen focal length $f$:
+  $$f = \frac{H}{2 \tan(\text{fov}_y / 2)}, \quad \text{fov}_y = 2 \arctan\left(\frac{H}{2 f}\right)$$
 
 ```typescript
 export class CameraRig {
-  // Add 3D waypoints with arrival times and gaze targets
+  // Projection mode: perspective or true isometric / axonometric
+  mode(type: 'perspective' | 'isometric', opts?: { orthoScale?: number }): this;
+
+  // Isometric preset for UI card stacks and exploded technical views
+  isometric(angleDeg = 30, rotationDeg = 45): this;
+
+  // Waypoints with arrival times, gaze targets, and lens options
   waypoint(t: number, pos: V3, lookAt?: V3, opts?: { fov?: number; roll?: number; snap?: boolean }): this;
 
-  // Orbit / Turntable choreographies around an object
+  // Orbit / Turntable choreographies around a 3D subject (Bishop frame transport)
   orbit(center: V3, radius: number, speedDegPerSec: number, opts?: { elevation?: number; wobble?: number }): this;
 
   // Cinematic lens presets (replaces arbitrary focal lengths)
@@ -112,63 +119,58 @@ export class CameraRig {
   // Target tracking with critically damped physical springs
   track(target: V3 | (() => V3), dampingRatio = 0.8, frequency = 2.5): this;
 
-  // Impulse shake (simulates camera rumble or physical impacts without corrupting trajectory)
+  // Impulse shake (simulates camera rumble without corrupting the baseline spline)
   shake(intensity: number, decay = 0.12): this;
 
-  // Evaluates smooth 6-DOF camera at time t
-  evaluate(t: number): Cam;
+  // Synchronizes Three.js camera and returns analytical Cam struct at time t
+  evaluate(t: number): { cam: Cam; threeCamera: THREE.Camera };
 }
 ```
 
-* **Value for Autonomous Agents**: Agents never have to manually calculate roll quaternions, look-at cross products, or piecewise easing splines. They declare spatial intent; the engine guarantees fluid cinema flight.
+* **Value for Autonomous Agents**: Agents declare spatial intent without manual quaternion math, roll matrix calculations, or gimbal lock risks, and can switch seamlessly between cinematic perspective flight and isometric UI showcases.
 
 ---
 
-### Module 2: Universal Transform Hierarchy & Anchor-Point Parenting (`TransformNode`)
-
-#### Scope Across Motion Graphics
-* **Compound UI Elements**: A mobile phone frame rotating while nested app screens, floating buttons, and tooltip badges stay anchored and inherit transforms.
-* **Rotational Pivots & Hinges**: Doors swinging on edge hinges, clock hands rotating from their base, progress dials rotating from center.
-* **Complex Geometric Assemblies**: Robotic arms, solar system orbital graphics, kinetic logo monograms unfolding from folded facets.
+### Module 2: Transform Hierarchy & Responsive Layout (`TransformNode` & `LayoutNode`)
 
 #### Architecture
-Every 2D or 3D graphical element inherits from `TransformNode`, introducing **anchor points** (the pivot point for rotation and scaling, normalized $[0..1]$ or pixel units) and recursive matrix concatenation:
+Separates local spatial kinematics from responsive screen layout:
+1. **`TransformNode`**: Implements 3D local anchor points $[x, y, z] \in [0..1]^3$ (enabling objects to scale up from their feet or rotate around edge hinges) with cached dirty-flag matrix concatenation:
+   $$M_{\text{world}} = M_{\text{parent}} \cdot M_{\text{local}} \cdot T(-\text{anchor})$$
+2. **`LayoutNode`**: Introduces declarative viewport pins that automatically adapt across 16:9, 9:16 vertical, and 1:1 square:
 
 ```typescript
-export class TransformNode {
-  // Local Transform properties
-  position: V3;               // Local translation [x, y, z]
-  rotation: V3;               // Local Euler angles or Quaternion
-  scale: V3;                  // Local scale [sx, sy, sz]
-  anchor: [number, number];   // Pivot point: [0.5, 0.5] = center, [0, 1] = bottom-left
+export class LayoutNode extends TransformNode {
+  // Declarative viewport pins
+  pin?: 'top-left' | 'top-center' | 'top-right' |
+        'center-left' | 'center' | 'center-right' |
+        'bottom-left' | 'bottom-center' | 'bottom-right';
 
-  // Hierarchy management
-  parent: TransformNode | null;
-  children: TransformNode[];
+  // Responsive safe-zone margins (Action-Safe 90%, Title-Safe 80%)
+  margin?: { top?: number; right?: number; bottom?: number; left?: number };
 
-  addChild(node: TransformNode): this;
-  removeChild(node: TransformNode): this;
-
-  // Computes concatenated world matrix M_world = M_parent * M_local * T(-anchor)
-  getWorldMatrix(): Matrix4;
-  getWorldPosition(): V3;
+  // 3D Anchor Pinning (pins 2D element to a 3D vertex in world space with depth scaling)
+  pinToWorldVertex(worldPos: V3, cam: THREE.Camera, opts?: {
+    screenOffset?: [number, number];
+    minScale?: number;
+    maxScale?: number;
+    occlusionCull?: boolean;
+  }): this;
 }
 ```
 
-* **Value for Autonomous Agents**: Agents can pivot any shape from its bottom-left, top-center, or exact geometric center simply by declaring `node.anchor = [0.5, 1.0]`. When animating scale bounces, the element scales up from its feet rather than from the screen origin.
+* **Value for Autonomous Agents**: Eliminates `F05` (clipping) bugs when authoring for mobile vertical feeds; agents simply declare `pin: 'top-right'`.
 
 ---
 
 ### Module 3: Universal Kinetic Typography Engine (`KineticText`)
 
-#### Scope Across Motion Graphics
-* **Brand Manifestos & Hero Titles**: Bold display headlines fading up character-by-character with tracking expansion.
-* **Product Teasers & UI Callouts**: Technical feature callout specs ("3.2 GHz", "OLED DISPLAY") pinned to 3D product anchors.
-* **Voiceover Explainer Videos**: Speech-synchronized typography revealing sentences in rhythm with voice narration.
-* **Data Visualizations & Financial Graphics**: Dynamic animated counters rolling smoothly from `$0` to `$1,420,000`.
+#### Architecture & Telemetry Bridge
+A declarative layout and animator pipeline for text in 2D screen-space or 3D world-space. Employs a hybrid rendering strategy: high-resolution Canvas2D caching for static display headers, and instanced glyph batches for high-speed staggered character animations.
 
-#### Architecture
-A declarative layout and animator pipeline for text in 2D screen-space or 3D world-space:
+* **CRITICAL TELEMETRY BRIDGE (Decoupling from Canvas2D Monkey-Patching)**:
+  In the current engine, `main.ts` intercepts `CanvasRenderingContext2D.prototype.fillText` to populate `window.__pdoom.textProbes[]`. If text moves to GPU instanced glyph batches (e.g. MSDF quad batches), `fillText` is bypassed, blinding `text.csv`, `F04` (collision), `F05` (clipping), and Instrument 07 (`legibility`).
+  `KineticText` resolves this by implementing a **direct telemetry emission bridge**: whenever `KineticText.layout()`, `stagger()`, or `render()` evaluates, it calculates its exact 2D screen bounding box $[x, y, w, h]$, string, and opacity and writes directly to `SceneGraph` and `window.__pdoom.textProbes[]`.
 
 ```typescript
 export class KineticText {
@@ -178,7 +180,7 @@ export class KineticText {
   layout(opts: { maxWidth?: number; align?: 'left' | 'center' | 'right'; tracking?: number; leading?: number }): this;
 
   // 3D Spatial Anchoring & Billboarding with depth-attenuated minimum readable scale
-  anchor3D(worldPos: V3, cam: Cam, opts?: { billboard?: boolean; minPx?: number; maxPx?: number }): this;
+  anchor3D(worldPos: V3, cam: THREE.Camera, opts?: { billboard?: boolean; minPx?: number; maxPx?: number }): this;
 
   // Staggered Character / Word / Line Animators
   stagger(t: number, opts: {
@@ -196,192 +198,137 @@ export class KineticText {
   // Automatic Ink Knockout Halo (ensures 100% legibility against background geometry)
   withKnockoutHalo(strokePx = 2.5, haloColor = LIN.ink): this;
 
-  // Direct render to Layer2D or WebGL text batch
-  render(ctx: CanvasRenderingContext2D, t: number): void;
+  // Direct Telemetry Emission (synchronizes screen bounds into SceneGraph & textProbes)
+  syncTelemetry(t: number, sceneGraph?: SceneGraph): void;
+
+  render(ctx: CanvasRenderingContext2D | THREE.WebGLRenderer, t: number): void;
 }
 ```
 
-* **Value for Autonomous Agents**: Replaces 200 lines of manual character loops and canvas string-measuring with a single, expressive builder that handles layout, animation, and legibility automatically.
-
 ---
 
-### Module 4: Procedural Vector Primitives, Trim Paths & SVG Import (`VectorBatch`)
+### Module 4: Analytic GPU Signed Distance Fields (`SDFBatch`)
 
-#### Scope Across Motion Graphics
-* **UI/UX Motion**: Rounded cards expanding, toggle switches sliding, progress rings filling.
-* **Brand & Logo Motion**: Geometry shapes morphing from an initial circle into a brand monogram, importing client SVGs.
-* **Technical HUDs & Infographics**: Animated circular compass reticles, radar sweeps, crosshairs, and data bars.
-* **Graphic Transitions**: Full-screen circle wipes, diagonal ribbon sweeps, and expanding iris masks.
+#### Architecture & Primitives
+Renders procedural vector primitives (rounded rectangles, rings, compass reticles, gauges, soft shadows) via instanced quads in a WebGL fragment shader using analytic Signed Distance Fields. Completely bypasses CPU triangulation and 4K texture upload bottlenecks:
 
-#### Architecture
-GPU-instanced procedural vector geometry with **trim path** support and SVG path loading:
+* **Analytic Trim Paths**: Supporting After Effects-style animated stroke reveals directly on the GPU with zero memory allocation.
+* **Analytic Soft Drop Shadows**: Evaluates box SDF with offset $(x - dx, y - dy)$ and Gaussian-like falloff $\text{smoothstep}(blur, -blur, d)$ directly in fragment shaders, producing soft card shadows with zero extra blur passes or textures.
+* **Pixel-Accurate Anti-Aliasing**:
+  $$\alpha = \text{clamp}\left(0.5 - \frac{d}{\text{fwidth}(d)}, 0.0, 1.0\right)$$
+* **Strict Logical Coordinates ($1920 \times 1080$)**: All inputs $(x, y, w, h)$ are authored strictly in Logical Canvas Points. Shaders apply the hardware `SCALE` multiplier internally at the vertex stage, shielding agents from DPI inconsistencies.
+* **WebGL State Cache Invariant (`renderer.resetState()`)**: To prevent desynchronizing Three.js's internal `WebGLState` cache (which causes depth-test failures or disappearing meshes), `SDFBatch.flush()` and `LineBatch.flush()` must call `renderer.resetState()` immediately after issuing raw WebGL draw calls.
 
 ```typescript
-export class VectorBatch {
-  // Primitives with animated trim paths (0..1 start and end)
-  circle(cx: number, cy: number, r: number, style?: ShapeStyle, trim?: [number, number]): void;
-  roundedRect(x: number, y: number, w: number, h: number, radius: number, style?: ShapeStyle): void;
-  polygon(cx: number, cy: number, r: number, sides: number, style?: ShapeStyle): void;
-  arc(cx: number, cy: number, r: number, startAngle: number, endAngle: number, style?: ShapeStyle): void;
+export interface SDFShapeInstance {
+  type: 'rounded-rect' | 'circle' | 'ring' | 'arc' | 'polygon' | 'shadow';
+  bounds: [number, number, number, number]; // [x, y, w, h] strictly in logical points (1920x1080)
+  radii?: [number, number, number, number];  // Top-left, top-right, bottom-right, bottom-left
+  fillColor?: [number, number, number, number];
+  strokeColor?: [number, number, number, number];
+  strokeWidth?: number;
+  trim?: [number, number];                   // [trimStart, trimEnd] (0..1)
+  shadowBlur?: number;                       // Soft drop shadow radius
+  shadowOffset?: [number, number];           // [dx, dy]
+  glow?: number;                             // Linear HDR bloom boost
+}
 
-  // SVG Vector Import: parses SVG path strings into animatable vector geometry
-  loadSvgPath(svgPathD: string, transform?: Transform2D, trim?: [number, number]): void;
-
-  // Technical HUD graphics
-  reticle(cx: number, cy: number, r: number, mode?: 'cross' | 'bracket' | 'radial'): void;
-  gauge(cx: number, cy: number, r: number, value01: number, rangeDeg?: [number, number]): void;
-
-  // Vector Path Morphing between two bezier paths
-  morph(pathA: Path2DData, pathB: Path2DData, progress01: number, style?: ShapeStyle): void;
-
-  // Flush batch to WebGL render target
+export class SDFBatch {
+  constructor(capacity = 2048);
+  rect(x: number, y: number, w: number, h: number, opts?: SDFRectOpts): void;
+  shadow(x: number, y: number, w: number, h: number, blur: number, color: [number, number, number, number], offset?: [number, number]): void;
+  ring(cx: number, cy: number, r: number, thickness: number, trim?: [number, number]): void;
+  reticle(cx: number, cy: number, r: number, style?: 'cross' | 'bracket' | 'gauge'): void;
+  // Flushes instanced GPU quads and automatically restores Three.js WebGL state
   flush(renderer: THREE.WebGLRenderer, target: THREE.WebGLRenderTarget): void;
 }
 ```
 
-* **Trim Path Support**: Every vector shape supports `trim: [start, end]` (0 to 1), replicating After Effects' most widely used vector animation primitive for stroke reveals and drawing animations.
-
 ---
 
-### Module 5: Universal Motion Bus & Animation Drivers (`MotionBus`)
-
-#### Scope Across Motion Graphics
-* **Physical Spring Bounces**: UI sheets snapping up with realistic mass, stiffness, and damping.
-* **Cubic-Bezier Easing**: Classic motion curves (`easeInOutExpo`, `cubic-bezier(0.25, 0.1, 0.25, 1.0)`).
-* **Multi-Element Stagger Math**: Spreading animations across $N$ elements (linear, center-out, random).
-* **Voiceover & Speech Timing**: Syncing visual accents to voiceover transcript words/phonemes.
-* **Procedural LFO Rhythms**: Looping background waves, ambient breathing lights, and technical scans in silent videos.
+### Module 5: Universal Motion Bus & Timeline Drivers (`MotionBus`)
 
 #### Architecture
-A unified physics, curve interpolation, and signal modulation bus:
+Decouples timeline time $t$ from specific audio files using an interchangeable `TimelineDriver` strategy pattern (`ClockDriver`, `AudioDriver`, `SpeechDriver`), while providing closed-form analytical springs with initial velocity injection:
 
 ```typescript
+export interface TimelineDriver {
+  readonly duration: number;
+  evaluate(t: number): DriverSample;
+}
+
 export class MotionBus {
-  // 1. Second-order physical spring solver (frequency in Hz, damping ratio zeta)
-  spring(triggerT: number, t: number, opts?: { freq?: number; damping?: number; scale?: number }): number;
+  // 1. Second-order physical spring solver with initial velocity injection
+  spring(triggerT: number, t: number, opts?: {
+    freq?: number;
+    damping?: number;
+    v0?: number; // Initial velocity at trigger (prevents momentum loss on state handoffs)
+    scale?: number;
+  }): number;
 
   // 2. Standard & Custom Bezier Easing Curves
   ease(t: number, t0: number, t1: number, curve: 'cubic' | 'expo' | 'elastic' | [number, number, number, number]): number;
 
-  // 3. Stagger Engine: returns an array of delay offsets for N elements
+  // 3. Stagger Engine: returns array of delay offsets for N elements
   stagger(count: number, totalDuration: number, pattern?: 'start' | 'center-out' | 'random' | 'wave'): number[];
 
-  // 4. Value Remapping with Easing
-  remap(val: number, inMin: number, inMax: number, outMin: number, outMax: number, easeFn?: (u: number) => number): number;
-
-  // 5. Procedural LFO Oscillators (for silent animations or ambient loops)
+  // 4. Procedural LFO Oscillators (for silent animations or ambient loops)
   lfo(wave: 'sine' | 'triangle' | 'saw' | 'square' | 'noise', frequencyHz: number, t: number): number;
 
-  // 6. Speech & Voiceover Timing Stream (when voice narration is present)
+  // 5. Speech & Voiceover Timing Stream (when voice narration is present)
   speechCue(cueId: string, t: number, window = 0.12): number;
-
-  // 7. Audio Envelope Follower (when music/SFX stems are present)
-  audioPeak(channel: 'master' | 'low' | 'mid' | 'high', t: number, window = 0.08): number;
 }
 ```
-
-* **Value for Autonomous Agents**: Guarantees physically natural bounce and spring settles, eliminating floaty, linear, or robotic movements across all animated properties.
 
 ---
 
-### Module 6: GPU Particles & Instanced Field Simulation (`ParticleSystem`)
-
-#### Scope Across Motion Graphics
-* **Product Reveals**: Drifting illuminated dust motes, specular glints reflecting off 3D surfaces.
-* **UI Micro-Interactions**: One-shot celebration confetti bursts on button clicks or transaction success states.
-* **Technical & Sci-Fi Graphics**: Digital data packet streams flowing through network lines, matrix grid points.
-* **Physical Impacts**: Sparks and shockwave rings radiating from high-energy scene cuts or collisions.
+### Module 6: Stateless Analytical GPU Particles (`AnalyticalParticles`)
 
 #### Architecture
-Lightweight GPU instanced sprite particles driven by analytical fields:
+To preserve mathematical determinism $\text{Frame} = f(t)$ under the 324-spp adaptive motion blur engine, particles are **stateless and closed-form**:
+
+$$p_i(t) = p_{0, i} + \vec{v}_{0, i} \tau + \frac{1}{2} \vec{g} \tau^2 + \vec{\mathcal{N}}_{\text{fbm}}(p_{0, i} + \vec{v}_{0, i} \tau, t)$$
+
+where $\tau = (t - t_{\text{birth}, i}) \pmod{\text{lifetime}}$. Zero simulation history, zero memory leaks, and bit-identical sampling in forward or reverse directions at any sub-frame.
 
 ```typescript
-export interface ParticleEmitterOpts {
-  capacity: number;           // Max particle count (e.g. 500–50,000)
-  shape: 'circle' | 'square' | 'spark' | 'ring';
-  rate: number;               // Continuous emission rate (particles/sec) or 0 for one-shot burst
-  lifetime: [number, number]; // [minLife, maxLife] in seconds
-  speed: [number, number];    // Emission velocity range
-  color: [string, string];    // Color ramp start/end
-  gravity?: V3;               // Global acceleration
-  turbulence?: number;        // Curl noise dispersion intensity
-}
-
-export class ParticleSystem {
-  createEmitter(opts: ParticleEmitterOpts): Emitter;
-  burst(emitterId: string, count: number, origin: V3, t: number): void;
-  render(renderer: THREE.WebGLRenderer, cam: Cam, t: number): void;
+export class AnalyticalParticles {
+  constructor(capacity: number, seed = 1337);
+  addEmitter(id: string, opts: ParticleEmitterOpts): this;
+  render(renderer: THREE.WebGLRenderer, cam: THREE.Camera, target: THREE.WebGLRenderTarget, t: number): void;
 }
 ```
-
-* **Value for Autonomous Agents**: Allows agents to add cinematic atmosphere and energetic impact with 3 lines of code without writing custom WebGL vertex buffers.
 
 ---
 
-### Module 7: Multi-Track Compositor & Track Matte System (`LayerStack`)
-
-#### Scope Across Motion Graphics
-* **Track Mattes / Stencil Masks**: Revealing a 3D product or city through the silhouette of a typographic headline (Alpha Matte).
-* **Multi-Layer Stacking**: Rendering a persistent global technical frame (timecodes, brand logo, crop marks) continuously over multiple independent 3D shots.
-* **Multi-Aspect Ratio Canvas**: Rendering 16:9 widescreen, 9:16 vertical, and 1:1 square from the same scene with responsive camera adaptation.
+### Module 7: Scoped Render Graph & Track Matte Compositor (`CompositorGraph`)
 
 #### Architecture
-A hierarchical NLE compositor layer stack:
+Replaces simple ping-pong crossfades with a multi-layer compositor supporting dual-texture alpha/luma track mattes and scoped post-processing:
 
 ```typescript
-export interface Layer {
-  name: string;
-  depth: 'background' | 'scene3d' | 'overlay2d' | 'hud';
-  blendMode: 'normal' | 'add' | 'screen' | 'multiply';
-  matte?: { type: 'alpha' | 'luma' | 'inverted-alpha'; sourceLayer: Layer };
-  render(f: Frame, target: THREE.WebGLRenderTarget): void;
-}
+export class CompositorGraph {
+  createLayer(name: string, opts: {
+    render: (target: THREE.WebGLRenderTarget) => void;
+    matte?: { source: string; mode: 'alpha' | 'inv-alpha' | 'luma' | 'inv-luma' };
+    blend?: 'normal' | 'add' | 'screen' | 'multiply';
+    opacity?: number;
+    post?: { bloom?: boolean; grain?: boolean; ca?: boolean }; // Scoped post-processing!
+  }): this;
 
-export class LayerStack {
-  // Multi-aspect ratio viewport configuration (16:9, 9:16, 1:1, 21:9)
-  setViewport(aspect: '16:9' | '9:16' | '1:1' | '21:9', customWidth?: number, customHeight?: number): this;
-
-  // Add layer to stack
-  addLayer(layer: Layer): this;
-
-  // Global persistent HUD / Branding overlay
-  setGlobalOverlay(overlay: Scene): this;
-
-  // Asset layers: Video or image textures
-  addVideoLayer(videoUrl: string, opts?: VideoLayerOpts): this;
-  addImageLayer(imageUrl: string, opts?: ImageLayerOpts): this;
-
-  // Shot transition effects
-  transition(fromShot: Scene, toShot: Scene, t: number, opts: {
-    type: 'cut' | 'dissolve' | 'wipe' | 'iris' | 'stencil-mask';
-    duration: number;
-    direction?: 'left' | 'right' | 'up' | 'down';
-  }): void;
+  evaluate(renderer: THREE.WebGLRenderer, finalTarget: THREE.WebGLRenderTarget): void;
 }
 ```
 
-* **Value for Autonomous Agents**: Allows complex multi-element compositions to be assembled modularly, without cramming background shaders, 3D meshes, and 2D text into a single monolithic file.
+* **Value for Autonomous Agents**: Allows 3D scenes to be masked through typography silhouettes (alpha matte) while keeping foreground UI text free of bloom or grain.
 
 ---
 
 ### Module 8: Semantic Scene Graph & Entity Introspection (`SceneGraph`)
 
-#### Scope Across Motion Graphics
-* **Directorial Scene Inspection**: Allowing an AI agent to query the scene at any timestamp and get a complete semantic map:
-  ```json
-  {
-    "t": 4.2,
-    "camera": { "pos": [0, 1.2, 12], "fov": 35, "target": [0, 1.2, 0] },
-    "entities": [
-      { "id": "product_hero", "type": "mesh", "role": "hero_subject", "worldPos": [0, 1.2, 0] },
-      { "id": "spec_title", "type": "text", "role": "headline", "screenBounds": [400, 200, 680, 248] },
-      { "id": "battery_gauge", "type": "vector", "role": "hud_graphic", "screenBounds": [1600, 80, 1720, 140] }
-    ]
-  }
-  ```
-* **Telemetric Accuracy**: Enables the visual diagnostic instruments (`onion`, `godview`, `compare`, `stitch`, `motion`) to inspect exact semantic boundaries rather than guessing via pixel scraping.
-
 #### Architecture
+An automated entity registry that derives 2D screen bounding boxes automatically by multiplying each node's local bounding box by its `TransformNode.getWorldMatrix()` and projecting through `CameraRig`:
+
 ```typescript
 export interface EntityMetadata {
   id: string;
@@ -389,7 +336,7 @@ export interface EntityMetadata {
   role: 'hero_subject' | 'headline' | 'callout' | 'hud' | 'background';
   worldPos?: V3;
   worldBounds?: BoundingBox3D;
-  screenBounds?: [number, number, number, number];
+  screenBounds?: [number, number, number, number]; // Automatically projected!
   opacity: number;
 }
 
@@ -400,28 +347,36 @@ export class SceneGraph {
 }
 ```
 
-* **Value for Autonomous Agents**: Gives vision-language models a structured semantic understanding of the visual scene, enabling intelligent self-correction and layout audits.
-
 ---
 
 ### Module 9: Multi-Format Delivery & Headless Export Pipeline (`ExportPipeline`)
 
-#### Scope Across Motion Graphics
-* **Production Master Delivery**: Rendering ProRes 422 HQ or high-bitrate H.264 MP4 with muxed audio.
-* **Transparent Web Overlays**: Exporting transparent WebM (VP9 + alpha channel) for web animations and Lottie-style UI embeds.
-* **Review Stills & Sequences**: Automated contact sheet generation at $4\text{K}$ or $1080\text{p}$.
+#### Architecture & Alpha Preservation Fix
+Enables `alpha: true` WebGL canvas initialization, clearing background targets to `[0, 0, 0, 0]` and delivering transparent WebM (VP9 + alpha) and ProRes 4444 exports.
 
-#### Architecture
+* **CRITICAL ALPHA CORRUPTION TRAP in `post.ts`**:
+  Even with `alpha: true` on WebGL, the post-processing shader in `post.ts:164` currently forces alpha to 1.0 (`fragColor = vec4(sat(s), 1.0)`), and vignette/grain shaders dirty blank pixels.
+  `post.ts` is upgraded with a `transparent` flag that:
+  1. Gates film grain by source alpha: $s += \text{grain} \times \alpha_{\text{src}}$
+  2. Multiplies vignette darkness strictly by source alpha.
+  3. Preserves alpha in the final output:
+     ```glsl
+     float colAlpha = texture(src, uv).a;
+     vec3 s = toSRGB(sat(col));
+     s += grainNoise * colAlpha;
+     fragColor = vec4(s * colAlpha, colAlpha);
+     ```
+
 ```typescript
 export class ExportPipeline {
-  // Configures headless encoder options
   exportVideo(opts: {
-    format: 'mp4' | 'webm-alpha' | 'prores' | 'png-sequence';
+    format: 'mp4' | 'webm-alpha' | 'prores-4444' | 'prores-422hq' | 'png-sequence';
     resolution: [number, number];
     fps: 60 | 30 | 24;
     from: number;
     to: number;
     audioTrack?: string;
+    transparent?: boolean;
     outPath: string;
   }): Promise<string>;
 }
@@ -429,62 +384,160 @@ export class ExportPipeline {
 
 ---
 
-## 4. Re-Aligning Diagnostic Tooling & Telemetry
+### Module 10: Pluggable Brand Design Token System (`DesignTokens`)
 
-With this universal framing, our existing visual tools and telemetry rules are elevated into **universal motion graphics instruments**:
+#### Architecture
+Replaces hardcoded palettes with a project-agnostic token registry that feeds both rendering and the telemetry auditor (`F12: palette_off_share`):
 
-### 4.1 The 4 Visual Instruments Across Motion Design
-1. **Multi-Exposure Motion Onion (`onion`)**:
-   - Traces UI sheet spring reveals, 3D product turntable camera arcs, vector shape morph paths, and kinetic typography deceleration curves on a single still without video playback.
-2. **3D God-View Camera Blueprint (`godview`)**:
-   - Provides external top-down ($XZ$) and side elevation ($YZ$) architectural blueprints with viewing cones and velocity ribbons for 3D product orbits, architectural fly-throughs, and isometric UI layer presentations.
-3. **Visual A/B Reference Anchor (`compare`)**:
-   - Automates side-by-side and $45^\circ$ diagonal split-wipes directly comparing active procedural code against Figma artboards, brand style guidelines, or benchmark animation plates.
-4. **Transition Seam Stitch Inspector (`stitch`)**:
-   - Generates false-color green/magenta overlays ($\pm 250\,\text{ms}$) and 10-frame contact strips to verify carrier alignment during UI card-to-fullscreen expansions, commercial match-cuts, and chapter handoffs.
-
-### 4.2 Universal Telemetry vs. Specialized Lyric Rules
-The telemetry catalog is explicitly divided into two operational tiers:
-
-#### A. Universal Motion Graphics Rules (`F04–F08`, `F11–F16`)
-Active for **all** motion design projects:
-* **F04 (`text_collision`)**: Overlapping 2D typography bounding boxes on matching depth planes.
-* **F05 (`text_clipping`)**: Viewport safe-margin clipping ($90\%$ safe area).
-* **F06 (`corner_persistence`)**: Static elements lingering in peripheral corner margins without motion.
-* **F07 (`static_digit_persistence`)**: Frozen data tickers or metrics failing to animate.
-* **F08 (`dead_motion`)**: Stalled timeline momentum outside intentional artistic holds.
-* **F11 (`bone_bloom_bright_nonsignal`)**: Highlight exposure exceeding design system thresholds.
-* **F12 (`palette_off_share`)**: Colors deviating from configured brand palette gamut ($\Delta E > 12.0$).
-* **F13 (`perf_frame_time`)**: GPU playback budget alert ($> 25\,\text{ms}$ at 60 fps).
-* **F14 (`sampler_max_spp`)**: Adaptive supersampling saturation.
-* **F15 (`edge_shimmer_flicker`)**: Sub-pixel aliasing and moiré crawl.
-* **F16 (`unintended_blank`)**: Unintended black/white screen dropouts.
-
-#### B. Specialized Lyric & Music-Sync Rules (`F01–F03`, `F09`, `F10`)
-*Purpose-built only for productions displaying synchronized on-screen lyrics and musical stems:*
-* **F01 (`lyric_visibility`)**: Word display duration evaluated against `lyrics.json` sung window.
-* **F02 (`sung_word_height`)**: Sung word peak cap height.
-* **F03 (`word_anticipation`)**: Word anticipation lead before vocal onset.
-* **F09 (`kick_response_ratio`)**: Kinetic energy response ratio on kick drum transient markers.
-* **F10 (`cut_inside_sung_word`)**: Hard visual cut landing inside an active sung vocal word.
-
-> **Operational Standard**: For any commercial, UI showcase, or non-lyric video, **rules `F01`, `F02`, `F03`, `F09`, and `F10` do not apply and can be completely ignored**.
+```typescript
+export interface DesignSystem {
+  id: string;
+  palette: {
+    background: string;
+    surface: string;
+    primaryText: string;
+    secondaryText: string;
+    accent: string;
+    accentSecondary?: string;
+    alert?: string;
+  };
+  typography: {
+    heroDisplay: string;
+    title: string;
+    body: string;
+    mono: string;
+  };
+  motion: {
+    springBouncy: [number, number];
+    springSnappy: [number, number];
+    easeEntrance: (u: number) => number;
+    easeExit: (u: number) => number;
+  };
+}
+```
 
 ---
 
-## 5. Phased Implementation Roadmap
+### Module 11: Directorial Self-Correction Contract (`AgentDirectorLoop` & `agent-heal`)
 
-| Phase | Milestone | Core Deliverables | Value to General Motion Graphics |
-| :--- | :--- | :--- | :--- |
-| **Phase 1** | **Continuous $C^2$ Camera Rig** | `CameraRig`, Hermite/Catmull-Rom splines, lens presets, turntable orbits. | Eliminates camera tremors and jerky piecewise breaks across all 3D scenes. |
-| **Phase 2** | **Transform Hierarchy & Parenting** | `TransformNode`, anchor points $[0..1]$, parent-child matrix concatenation. | Enables compound animated objects, rotational hinges, and layered UI motion. |
-| **Phase 3** | **Universal Kinetic Typography** | `KineticText`, character/word staggers, numerical counters, knockout halos, 3D billboarding. | Powers brand headlines, voiceover titles, data counters, and feature callouts. |
-| **Phase 4** | **Procedural Vector Shapes & Trim Paths** | `VectorBatch`, filled rounded rects, animated trim paths, reticles, SVG path import. | Enables UI/UX motion, technical HUD graphics, progress rings, and shape morphs. |
-| **Phase 5** | **Universal Motion Bus & Easing** | `MotionBus`, physical spring solvers, cubic-bezier curves, stagger math, voiceover sync. | Replaces ad-hoc math with organic physics, spring bounces, and precise easing. |
-| **Phase 6** | **GPU Particles & Instanced Fields** | `ParticleSystem`, instanced sprite emitters, sparks, confetti, turbulence fields. | Adds cinematic atmosphere, ambient dust, and high-energy collision impacts. |
-| **Phase 7** | **Multi-Track Compositor & Mattes** | `LayerStack`, alpha/luma track mattes, multi-aspect ratio canvas (16:9, 9:16, 1:1, 21:9). | Enables vertical social videos, stencil reveals, and persistent global branding overlays. |
-| **Phase 8** | **Semantic Scene Graph** | `SceneGraph`, entity registration, 3D bounding volumes, JSON introspection API. | Provides AI agents with a complete mental model of scene topology for self-correction. |
-| **Phase 9** | **Multi-Format Export Pipeline** | `ExportPipeline`, transparent WebM (VP9 + alpha), ProRes 422, H.264 MP4. | Delivers production masters, web animation assets, and review sequences. |
+#### Architecture & Machine-Actionable Directive Schema
+Maps signals from the 9 visual diagnostic instruments directly into automated, machine-actionable repair directives emitted into `findings.json`:
+
+```json
+{
+  "id": "F05-001",
+  "tier": "A",
+  "rule": "text_clipping",
+  "target_entity": "badge_callout_right",
+  "timestamp": 4.25,
+  "evidence_file": "strip_collision_4.25.png",
+  "remediation_directive": {
+    "action": "MUTATE_PROPERTY",
+    "target_file": "src/scenes/hero.ts",
+    "target_line_hint": "badge.pin",
+    "recommended_patch": "pin: 'top-right', margin: { right: 48 }"
+  }
+}
+```
+
+#### Diagnostic Remediation Matrix
+
+| Diagnostic Tool Signal | Root Cause Detected | Autonomous Agent Remediation Strategy |
+| :--- | :--- | :--- |
+| **`curves`**: `arrival_impact_pct > 5.0` | Element slams into rest abruptly ($C^0$ kink). | Tune ease-out shoulder in `MotionBus.ease()` or match boundary velocity $v_0 = v_{\text{prev}}$. |
+| **`legibility`**: `min_contrast < 4.5` | Dynamic background reflection blinds text. | Apply `KineticText.withKnockoutHalo()` or inject localized backdrop scrim. |
+| **`godview`**: `min_near_distance < 0.10m` | Camera penetrates 3D geometry or near-clip plane. | Retract flight spline waypoint along gaze normal or expand lens focal length. |
+| **`rhythm`**: `onset_count > 3` at $\Delta t < 20\text{ms}$ | Multiple elements pop simultaneously (traffic jam). | Apply `MotionBus.stagger(N, 0.35, 'center-out')` for a 60–80ms cascade. |
+| **`saliency`**: `hero_attention_share < 60%` | Secondary background particles hijack viewer gaze. | Dim peripheral line contrast or lower particle emission speed. |
+| **`framing`**: `9:16 safe_zone_breaches > 0` | Peripheral callouts cropped in mobile format. | Switch element to `LayoutNode.pin = 'top-center'` or pull layout margins inward. |
+
+---
+
+### Module 12: Declarative Scene Authoring DSL & Strict Lifecycle (`defineScene`)
+
+#### Architecture & Ergonomics
+To protect autonomous coding agents from boilerplate mistakes (such as forgetting to register an entity in `SceneGraph`, forgetting `syncTelemetry()`, or failing to flush GPU batches), scenes are declared via a fluent factory pattern:
+
+```typescript
+export interface SceneDefinition {
+  id: string;
+  duration: number;
+  // Strict Two-Phase Lifecycle:
+  // Phase 1: Asynchronous asset preloading (GLTF meshes, HDR probes, SVGs, audio stems)
+  preload?: (engine: Engine) => Promise<void>;
+  // Phase 2: Strictly synchronous, deterministic closed-form evaluation f(t)
+  setup: (ctx: SceneContext) => void;
+}
+
+export function defineScene(def: SceneDefinition) {
+  return def;
+}
+```
+
+* **The Boilerplate Shield (`SceneContext`)**:
+  When an agent invokes `ctx.text()`, `ctx.card()`, or `ctx.model()`, the context automatically handles:
+  1. Instantiating the underlying primitive (`KineticText`, `SDFBatch`, `TransformNode`).
+  2. Registering screen bounds into `SceneGraph` and `window.__pdoom.textProbes[]` for zero-annotation telemetry.
+  3. Queuing GPU batch flushes with automatic `renderer.resetState()` cleanup.
+* **Asynchronous Font Loading Gate (`document.fonts.ready`)**:
+  `engine.init()` strictly awaits `document.fonts.ready` prior to evaluating Frame 0, completely eliminating the "flash of unstyled text" and zero-width text measurement glitches that cause false `F04`/`F05` flags.
+
+---
+
+## 4. Re-Aligning Diagnostic Tooling & Telemetry
+
+With this universal framing, the complete 9-instrument diagnostic suite covers all motion design domains:
+
+### The 9 Visual Instruments Across Motion Design
+1. **Multi-Exposure Motion Onion (`onion`)**: Traces spatial motion arcs and spring deceleration trails on a single still.
+2. **3D God-View Camera Blueprint (`godview`)**: External $XZ$/$YZ$ architectural blueprints with viewing cones and velocity ribbons.
+3. **Visual A/B Reference Anchor (`compare`)**: Side-by-side and $45^\circ$ diagonal split-wipes against Figma mockups and design tokens.
+4. **Transition Seam Stitch Inspector (`stitch`)**: Green/magenta false-color overlay across cut boundaries ($\pm 250\,\text{ms}$).
+5. **Parametric Speed Graph Inspector (`curves`)**: Isolated speed and acceleration derivatives plotting $y(t), v(t), a(t)$ to flag tangent kinks.
+6. **Visual Gaze Saliency Heatmap (`saliency`)**: Spatio-temporal foveal attention modeling confirming hero subject captures $> 65\%$ focus.
+7. **Dynamic Contrast & Legibility Inspector (`legibility`)**: Continuous local WCAG contrast tracking behind glyphs across moving backgrounds.
+8. **Choreography Gantt & Stagger Visualizer (`rhythm`)**: Multi-track timeline bars showing entrance ease, dwell hold, and exit phase.
+9. **Multi-Aspect Responsive Framing Inspector (`framing`)**: $2 \times 2$ contact plate auditing 16:9, 9:16 vertical, and 1:1 square simultaneously.
+
+### Universal Telemetry vs. Specialized Lyric Rules
+* **Universal Rules (`F04–F08`, `F11–F16`)**: Active for all motion design projects (collisions, safe clipping, persistence, dead motion, bloom, palette gamut, GPU frame budget, and blank dropouts).
+* **Lyric-Specific Rules (`F01–F03`, `F09`, `F10`)**: Purpose-built exclusively for productions displaying on-screen lyrics and musical kick stems. **For any commercial, UI showcase, or non-lyric video, these flags do not apply and can be safely ignored.**
+
+---
+
+## 5. Optimized 4-Milestone Strategic Implementation Roadmap
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│             OPTIMIZED 4-STAGE ARCHITECTURAL ROADMAP EXECUTION          │
+├────────────────────────────────────────────────────────────────────────┤
+│ MILESTONE 1: CORE DECOUPLING, TRANSPARENCY & UNIFIED COORDINATES       │
+│ • Universal TimelineDriver (ClockDriver, AudioDriver, SpeechDriver)    │
+│ • WebGL alpha: true & alpha-preserving post.ts shader                  │
+│ • Unify Camera3D Pinhole math with THREE.PerspectiveCamera & Viewport  │
+│ • Pluggable DesignTokens & clean out legacy hardcoded constants        │
+│ • Runnable 5-second procedural demo scene (verifies decoupling)        │
+├────────────────────────────────────────────────────────────────────────┤
+│ MILESTONE 2: PROCEDURAL VECTOR PLUMBING, ANALYTIC SDFs & TELEMETRY     │
+│ • SDFBatch (GPU rounded rects, trim paths, rings, soft drop shadows)   │
+│ • Move high-draw elements off Canvas2D to eliminate 4K PCIe saturation │
+│ • KineticText with telemetry bridge to SceneGraph/textProbes           │
+│ • MotionBus (Analytical springs with initial velocity v0)              │
+│ • WebGL State Cache Invariant (renderer.resetState() after batches)    │
+├────────────────────────────────────────────────────────────────────────┤
+│ MILESTONE 3: SPATIAL HIERARCHIES, DUAL-MODE CAMERA & PARTICLES         │
+│ • CameraRig (Perspective + Isometric, Bishop frames, SQUAD, arc-len)  │
+│ • TransformNode & LayoutNode (3D anchors, safe-zone responsive pins)   │
+│ • AnalyticalParticles (Stateless deterministic GPU emitters)           │
+├────────────────────────────────────────────────────────────────────────┤
+│ MILESTONE 4: COMPOSITING, INTROSPECTION, DSL & AGENT HEALING           │
+│ • CompositorGraph (Dual-texture track mattes, scoped post isolation)   │
+│ • SceneGraph (Auto-derived 3D-to-2D screen bounds)                     │
+│ • Declarative Scene DSL (defineScene, SceneContext, strict preloading) │
+│ • ExportPipeline (Alpha WebM, ProRes 4444, H.264 MP4)                  │
+│ • Machine-Actionable Self-Healing Directive Protocol (agent-heal)      │
+└────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 

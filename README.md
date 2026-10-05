@@ -18,16 +18,16 @@ This toolset operates on **Visual Instrumentation & Empirical Calibration**:
 
 ---
 
-## 2. The 4 Visual Diagnostic Instruments
+## 2. The 4 Operational Visual Diagnostic Instruments
 
-All visual tools are implemented modularly in `app/scripts/visual/`, keeping `render.ts` lightweight and unbloated. Each tool can be executed via its dedicated forwarder in `scripts/` or as a subcommand of `render.ts`.
+All visual tools are implemented modularly in `app/scripts/visual/`, keeping `render.ts` lightweight and unbloated. Each tool can be executed via its dedicated forwarder in `scripts/` or as a subcommand of `render.ts`. Comprehensive operational guides for each tool are located in [`tooling documentation/`](./tooling%20documentation/). Future proposed instruments (05–09) are cataloged in [`ideas/`](./ideas/).
 
-| Instrument | CLI Command | Visual Artifacts | Purpose & Insights Across Motion Design |
+| Instrument | CLI Command | Visual Artifacts | Operational Guide & Insights Across Motion Design |
 | :--- | :--- | :--- | :--- |
-| **Multi-Exposure Motion Onion** | `bun scripts/onion.ts`<br>`bun scripts/render.ts onion` | `onion_motion.png`<br>`onion_summary.json` | **Temporal motion arcs & easing on a single still**: Collapses an animation window ($0.5\text{–}1.5\text{s}$) into a chromatic ghost trail (cyan $\to$ natural $\to$ amber), instantly exposing camera micro-tremors, physical spring oscillation damping, vector morph glitches, and kinetic typography deceleration without video playback. |
-| **3D God-View Camera Blueprint** | `bun scripts/godview.ts`<br>`bun scripts/render.ts godview` | `cam_godview.png`<br>`godview_summary.json` | **3D spatial blindness & frustum clearances**: Renders orthographic top-down ($XZ$) and side elevation ($YZ$) blueprints showing scene geometry bounds, hero product anchors, camera flight ribbons, and field-of-view viewing cones. Prevents near-plane clipping and spatial collisions. |
-| **Visual A/B Reference Anchor** | `bun scripts/compare.ts`<br>`bun scripts/render.ts compare` | `ab_side_by_side.png`<br>`ab_split_wipe.png`<br>`ab_comparison.json` | **Aesthetic ground-truth benchmarking**: Automated side-by-side and $45^\circ$ diagonal split-wipe contact sheets directly comparing typographic scale, stroke weights, negative space ratio, and color gamut against Figma keyframes, brand guidelines, or benchmark plates. |
-| **Transition Seam Stitch Inspector** | `bun scripts/stitch.ts`<br>`bun scripts/render.ts stitch` | `onion_seam.png`<br>`strip_seam.png`<br>`stitch_summary.json` | **Scene handoff & UI state cut inspector**: Overlays outgoing frame $N-1$ (green) and incoming frame $N$ (magenta) across cut boundaries ($\pm 250\,\text{ms}$) to verify carrier geometry alignment (UI cards, logos, focal anchors), velocity continuity, and horizon stability. |
+| **Multi-Exposure Motion Onion** | `bun scripts/onion.ts`<br>`bun scripts/render.ts onion` | `onion_motion.png`<br>`onion_summary.json` | [**02-multi-exposure-motion-onion.md**](./tooling%20documentation/02-multi-exposure-motion-onion.md)<br>**Temporal motion arcs & easing on a single still**: Collapses an animation window ($0.5\text{–}1.5\text{s}$) into a chromatic ghost trail (cyan $\to$ natural $\to$ amber), instantly exposing camera micro-tremors, physical spring oscillation damping, vector morph glitches, and kinetic typography deceleration without video playback. |
+| **3D God-View Camera Blueprint** | `bun scripts/godview.ts`<br>`bun scripts/render.ts godview` | `cam_godview.png`<br>`godview_summary.json` | [**01-godview-camera-blueprint.md**](./tooling%20documentation/01-godview-camera-blueprint.md)<br>**3D spatial blindness & frustum clearances**: Renders orthographic top-down ($XZ$) and side elevation ($YZ$) blueprints showing scene geometry bounds, hero product anchors, camera flight ribbons, and field-of-view viewing cones. Prevents near-plane clipping and spatial collisions. |
+| **Visual A/B Reference Anchor** | `bun scripts/compare.ts`<br>`bun scripts/render.ts compare` | `ab_side_by_side.png`<br>`ab_split_wipe.png`<br>`compare_summary.json` | [**03-visual-ab-reference-anchor.md**](./tooling%20documentation/03-visual-ab-reference-anchor.md)<br>**Aesthetic ground-truth benchmarking**: Automated side-by-side and $45^\circ$ diagonal split-wipe contact sheets directly comparing typographic scale, stroke weights, negative space ratio, and color gamut against Figma keyframes, brand guidelines, or benchmark plates. |
+| **Transition Seam Stitch Inspector** | `bun scripts/stitch.ts`<br>`bun scripts/render.ts stitch` | `onion_seam.png`<br>`strip_seam.png`<br>`stitch_summary.json` | [**04-transition-seam-stitch-inspector.md**](./tooling%20documentation/04-transition-seam-stitch-inspector.md)<br>**Scene handoff & UI state cut inspector**: Overlays outgoing frame $N-1$ (green) and incoming frame $N$ (magenta) across cut boundaries ($\pm 250\,\text{ms}$) to verify carrier geometry alignment (UI cards, logos, focal anchors), velocity continuity, and horizon stability. |
 
 ---
 
@@ -93,21 +93,26 @@ Agentic motion design toolset/
 │   ├── example.json                  # Reference distributions (min, p10, p50, p90, max)
 │   └── director-notes.md             # Directorial artistic feedback & intent log
 │
-├── ideas/                            # Visual diagnostic instrument specifications
-│   ├── 01-godview-camera-blueprint.md
-│   ├── 02-multi-exposure-motion-onion.md
-│   ├── 03-visual-ab-reference-anchor.md
-│   ├── 04-transition-seam-stitch-inspector.md
+├── ideas/                            # Future diagnostic instrument proposals (05–09)
+│   ├── 05-parametric-motion-curve-speed-graph.md
+│   ├── 06-visual-gaze-saliency-attention-heatmap.md
+│   ├── 07-dynamic-contrast-legibility-inspector.md
+│   ├── 08-choreography-gantt-stagger-rhythm.md
+│   ├── 09-multi-aspect-responsive-framing.md
 │   └── README.md
 │
 ├── docs/                             # Engineering audit notes
 │   ├── calibration-notes.md          # False-positive resolutions & threshold lineage
 │   └── motion-report.md              # Telemetry report specification
 │
-└── tooling documentation/            # Comprehensive engineering documentation
-    ├── visual-diagnostic-tools.md    # Guide for the 4 modular visual instruments
+└── tooling documentation/            # Comprehensive engineering & operational documentation
+    ├── 01-godview-camera-blueprint.md # Operational guide for 3D God-View Blueprint
+    ├── 02-multi-exposure-motion-onion.md # Operational guide for Multi-Exposure Motion Onion
+    ├── 03-visual-ab-reference-anchor.md # Operational guide for Visual A/B Reference Anchor
+    ├── 04-transition-seam-stitch-inspector.md # Operational guide for Transition Seam Stitch
+    ├── visual-diagnostic-tools.md    # Master architecture guide for the 4 visual instruments
     ├── current-motion-system.md      # Detailed motion pipeline architecture
-    ├── engine-review-and-roadmap.md  # Universal engine architecture & roadmap (v2.0.0)
+    ├── engine-review-and-roadmap.md  # Universal engine architecture & roadmap (v2.4.0)
     └── README.md
 ```
 
