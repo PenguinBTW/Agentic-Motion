@@ -103,6 +103,8 @@ export class ExportPipeline {
       errors.push(`Invalid format: ${opts.format}`);
     } else if (opts.transparent && !preset.supportsAlpha) {
       errors.push(`Format ${opts.format} does not support alpha transparency. Use 'webm-alpha' or 'prores-4444'.`);
+    } else if (opts.gpu && preset.supportsAlpha) {
+      errors.push(`Hardware GPU encoding (${opts.gpuEncoder ?? 'gpu'}) does not support alpha channel pixel formats (${preset.pixFmt}). Use software encoding.`);
     }
 
     if (opts.from !== undefined && opts.to !== undefined && opts.to <= opts.from) {

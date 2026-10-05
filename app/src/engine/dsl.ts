@@ -103,16 +103,35 @@ export class SceneContext {
         id,
         type: 'text',
         role: opts?.role ?? 'headline',
-        opacity: 1.0,
+        opacity: opts?.alpha ?? 1.0,
         text: content,
         fontPx: opts?.fontSize ?? 36,
       });
-    } else if (kt.text !== content) {
-      kt.setText(content);
+    } else {
+      if (opts) kt.updateStyle(opts);
+      if (kt.text !== content) kt.setText(content);
       const meta = this.sceneGraph.get(id);
-      if (meta) meta.text = content;
+      if (meta) {
+        meta.text = content;
+        if (opts?.fontSize) meta.fontPx = opts.fontSize;
+        if (opts?.alpha !== undefined) meta.opacity = opts.alpha;
+      }
     }
     return kt;
+  }
+
+  /**
+   * Render text node onto canvas and synchronize exact 2D screen bounds to SceneGraph
+   */
+  renderText(id: string, c2d: CanvasRenderingContext2D, t: number, x: number, y: number, staggerStates?: any[]): void {
+    const kt = this.textNodes.get(id);
+    if (!kt) return;
+    kt.render(c2d, t, x, y, staggerStates);
+    const bounds = kt.getScreenBounds(x, y);
+    const meta = this.sceneGraph.get(id);
+    if (meta) {
+      meta.screenBounds = bounds;
+    }
   }
 
   /**
@@ -153,7 +172,11 @@ export class SceneContext {
     opacity?: number;
   }): void {
     const opacity = opts.opacity ?? 1.0;
-    if (opacity <= 0.001) return;
+    if (opacity <= 0.001) {
+      const meta = this.sceneGraph.get(id);
+      if (meta) meta.opacity = 0;
+      return;
+    }
 
     if (opts.shadow) {
       const sBlur = opts.shadow.blur ?? 16;
@@ -244,14 +267,19 @@ export class SceneContext {
    * Flush all GPU vector batches and 2D canvas layers into out target
    */
   flush(out: THREE.WebGLRenderTarget): void {
-    // 1. Flush SDF quads
+    // 1. Flush 3D lines if any were queued
+    if (this.lines.count > 0) {
+      this.lines.render(this.renderer, out, this.threeCam);
+    }
+
+    // 2. Flush SDF quads
     this.sdf.flush(this.renderer, out);
 
-    // 2. Upload and composite 2D Canvas Layer
+    // 3. Upload and composite 2D Canvas Layer
     const layerTex = this.layer2d.upload();
     this.sceneCtx.comp.draw(this.renderer, layerTex, out, { mode: 'normal', opacity: 1.0 });
 
-    // 3. Telemetry sync
+    // 4. Telemetry sync
     if (this.currentFrame) {
       this.sceneGraph.syncTelemetry(this.currentFrame.t);
     }

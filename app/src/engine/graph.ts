@@ -50,9 +50,8 @@ void main() {
   else if (matteMode == 2) mask = luma(m.rgb);
   else if (matteMode == 3) mask = 1.0 - luma(m.rgb);
 
-  float finalA = clamp(s.a * mask * opacity, 0.0, 1.0);
-  // Output straight or premultiplied
-  fragColor = vec4(s.rgb * finalA, finalA);
+  float mFactor = clamp(mask * opacity, 0.0, 1.0);
+  fragColor = vec4(s.rgb * mFactor, s.a * mFactor);
 }
 `;
 
@@ -77,19 +76,20 @@ export class CompositorGraph {
     uniform sampler2D base;
     uniform sampler2D over;
     uniform int mode; // 0=normal, 1=add, 2=screen, 3=multiply
+    uniform float opacity;
     in vec2 vUv;
     out vec4 fragColor;
 
     void main() {
       vec4 b = texture(base, vUv);
-      vec4 o = texture(over, vUv);
+      vec4 o = texture(over, vUv) * clamp(opacity, 0.0, 1.0);
 
       if (mode == 1) { // Additive
         fragColor = vec4(b.rgb + o.rgb, clamp(b.a + o.a, 0.0, 1.0));
       } else if (mode == 2) { // Screen
         fragColor = vec4(1.0 - (1.0 - b.rgb) * (1.0 - o.rgb), clamp(b.a + o.a, 0.0, 1.0));
-      } else if (mode == 3) { // Multiply
-        fragColor = vec4(b.rgb * o.rgb, b.a * o.a);
+      } else if (mode == 3) { // Premultiplied Multiply Over
+        fragColor = vec4(b.rgb * (1.0 - o.a) + (b.rgb * o.rgb), o.a + b.a * (1.0 - o.a));
       } else { // Normal premultiplied over
         fragColor = vec4(o.rgb + b.rgb * (1.0 - o.a), o.a + b.a * (1.0 - o.a));
       }
@@ -100,6 +100,7 @@ export class CompositorGraph {
       base: { value: null },
       over: { value: null },
       mode: { value: 0 },
+      opacity: { value: 1.0 },
     }, { blending: THREE.NoBlending });
   }
 
@@ -181,6 +182,7 @@ export class CompositorGraph {
       this.blendPass.u.base!.value = currentAccum.texture;
       this.blendPass.u.over!.value = sourceTex;
       this.blendPass.u.mode!.value = bMode;
+      this.blendPass.u.opacity!.value = l.matte ? 1.0 : (l.opacity ?? 1.0);
 
       // Last layer renders directly to finalTarget
       const isLast = (i === this.layers.length - 1);

@@ -47,6 +47,17 @@ function assert(cond: boolean, msg: string) {
   passedTests++;
 }
 
+// Mock WebGL Renderer & Target for test environment
+const mockRenderer = {
+  resetState: () => {},
+  setRenderTarget: () => {},
+  clear: () => {},
+  render: () => {},
+  getRenderTarget: () => null,
+} as unknown as THREE.WebGLRenderer;
+
+const mockTarget = {} as THREE.WebGLRenderTarget;
+
 // ----------------------------------------------------------------------------
 // 1. Test CompositorGraph
 // ----------------------------------------------------------------------------
@@ -70,6 +81,12 @@ compGraph.createLayer('fg', {
 
 assert(typeof compGraph.evaluate === 'function', 'CompositorGraph.evaluate exists');
 assert(typeof compGraph.dispose === 'function', 'CompositorGraph.dispose exists');
+
+// Actually evaluate the graph and verify all layers are invoked
+compGraph.evaluate(mockRenderer, mockTarget);
+assert(layer1Rendered, 'CompositorGraph.evaluate successfully executes Layer 1 render');
+assert(layer2Rendered, 'CompositorGraph.evaluate successfully executes Layer 2 render with track matte');
+
 compGraph.dispose();
 
 // ----------------------------------------------------------------------------
@@ -81,6 +98,7 @@ const sg = new SceneGraph();
 const nodeA = new LayoutNode('header_box');
 nodeA.size = [400, 100, 0];
 nodeA.position = [0, 0, 0];
+nodeA.anchor = [0.5, 0.5, 0]; // Center anchor
 
 const nodeB = new LayoutNode('body_box');
 nodeB.size = [400, 100, 0];
@@ -110,9 +128,9 @@ assert(headlines.length === 1 && headlines[0]?.id === 'header', 'SceneGraph.quer
 const textEntities = sg.queryByType('text');
 assert(textEntities.length === 1 && textEntities[0]?.id === 'body', 'SceneGraph.queryByType finds text entities');
 
-// Test 3D-to-2D projection
+// Test 3D-to-2D projection and anchor centering
 const testCam = new THREE.PerspectiveCamera(50, W / H, 0.1, 1000);
-testCam.position.set(0, 0, 5);
+testCam.position.set(0, 0, 500);
 testCam.lookAt(0, 0, 0);
 testCam.updateMatrixWorld();
 testCam.updateProjectionMatrix();
@@ -120,6 +138,13 @@ testCam.updateProjectionMatrix();
 sg.updateScreenProjections(testCam, W, H);
 const headerMeta = sg.get('header');
 assert(headerMeta?.screenBounds !== undefined, 'SceneGraph projects 3D nodes into 2D screenBounds');
+
+// Verify center anchor [0.5, 0.5] projects centered at [W/2, H/2]
+const [minX, minY, maxX, maxY] = headerMeta!.screenBounds!;
+const centerX = (minX + maxX) / 2;
+const centerY = (minY + maxY) / 2;
+assert(Math.abs(centerX - W / 2) < 1.0, `Center anchor X projects to screen center (${centerX.toFixed(1)} ≈ ${W / 2})`);
+assert(Math.abs(centerY - H / 2) < 1.0, `Center anchor Y projects to screen center (${centerY.toFixed(1)} ≈ ${H / 2})`);
 
 // Test collision detector
 const collisions = sg.detectCollisions();
@@ -186,19 +211,25 @@ const TestSceneClass = defineScene({
 
     const cardMeta = ctx.sceneGraph.get('test_card');
     assert(cardMeta?.screenBounds !== undefined, 'ctx.card registers screenBounds in SceneGraph');
+
+    // Test zero-opacity clearing in SceneGraph
+    ctx.card('fading_card', { x: 50, y: 50, w: 100, h: 50, opacity: 0.0 });
+    const fadingMeta = ctx.sceneGraph.get('fading_card');
+    assert(fadingMeta === undefined || fadingMeta.opacity === 0, 'Zero opacity elements are marked inactive in SceneGraph');
+
+    // Test ctx.renderText bounds synchronization
+    ctx.renderText('test_title', ctx.layer2d.ctx, f.t, 100, 100);
+    const titleMeta = ctx.sceneGraph.get('test_title');
+    assert(titleMeta?.screenBounds !== undefined, 'ctx.renderText synchronizes exact 2D screen bounds to SceneGraph');
+
+    // Test LineBatch queuing and automatic flush
+    ctx.lines.seg(0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1);
+    assert(ctx.lines.count > 0, 'LineBatch queues line segments');
+    ctx.flush(out);
   },
 });
 
 assert(typeof TestSceneClass === 'function', 'defineScene returns a valid SceneClass constructor');
-
-// Mock scene context for execution
-const mockRenderer = {
-  resetState: () => {},
-  setRenderTarget: () => {},
-  clear: () => {},
-  render: () => {},
-  getRenderTarget: () => null,
-} as unknown as THREE.WebGLRenderer;
 
 const mockSceneCtx: SceneCtx = {
   renderer: mockRenderer,
@@ -236,7 +267,6 @@ const mockFrame: Frame = {
   tout: 0,
 };
 
-const mockTarget = {} as THREE.WebGLRenderTarget;
 sceneInstance.render(mockFrame, mockTarget);
 assert(renderExecuted, 'defineScene render callback executed successfully');
 sceneInstance.dispose();
@@ -262,6 +292,10 @@ assert(validWebm.valid, 'Validation succeeds for transparent webm-alpha');
 
 const invalidMp4 = ExportPipeline.validate({ format: 'mp4', transparent: true, outPath: 'out.mp4' });
 assert(!invalidMp4.valid && invalidMp4.errors.length > 0, 'Validation rejects transparent mp4');
+
+// Test GPU hardware encoder rejection on alpha format
+const invalidGpuAlpha = ExportPipeline.validate({ format: 'webm-alpha', transparent: true, gpu: true, gpuEncoder: 'h264_nvenc', outPath: 'out.webm' });
+assert(!invalidGpuAlpha.valid, 'Validation rejects GPU hardware encoding with alpha channels');
 
 // Test FFmpeg args generation
 const ffArgs = ExportPipeline.buildFFmpegArgs({
@@ -291,11 +325,14 @@ assert(cliCmd.includes('bun scripts/render.ts video'), 'ExportPipeline generates
 // ----------------------------------------------------------------------------
 console.log('\n--- 5. Testing AgentHeal ---');
 const sampleSignals: DiagnosticSignal[] = [
-  { rule: 'curves', entityId: 'hero_box', t: 2.4, value: 7.8, threshold: 5.0 },
-  { rule: 'legibility', entityId: 'sub_text', t: 3.1, value: 2.8, threshold: 4.5 },
+  { rule: 'onion', entityId: 'gyro_curve', t: 1.1, context: { target_file: 'src/scenes/hero.ts' } },
   { rule: 'godview', entityId: 'cam_rig', t: 4.0, value: 0.05, threshold: 0.10 },
-  { rule: 'rhythm', entityId: 'card_group', t: 1.2, value: 5, threshold: 3 },
+  { rule: 'compare', entityId: 'brand_badge', t: 2.5 },
+  { rule: 'stitch', entityId: 'cut_seam', t: 5.0 },
+  { rule: 'curves', entityId: 'hero_box', t: 2.4, value: 7.8, threshold: 5.0 },
   { rule: 'saliency', entityId: 'hero_car', t: 2.0, value: 38, threshold: 60 },
+  { rule: 'legibility', entityId: 'sub_text', t: 3.1, value: 2.8, threshold: 4.5 },
+  { rule: 'rhythm', entityId: 'card_group', t: 1.2, value: 5, threshold: 3 },
   { rule: 'framing', entityId: 'side_badge', t: 1.8 },
   { rule: 'F04', entityId: 'card_a', t: 2.2 },
   { rule: 'F05', entityId: 'edge_text', t: 0.5 },
@@ -304,24 +341,32 @@ const sampleSignals: DiagnosticSignal[] = [
 ];
 
 const findings = AgentHeal.processSignals(sampleSignals);
-assert(findings.length === 10, 'AgentHeal processes all diagnostic signals');
+assert(findings.length === 13, 'AgentHeal processes all 13 diagnostic signals including 9 visual instruments');
 
-// Test remediation actions
-assert(findings[0]!.remediation_directive.action === 'TUNE_CURVE', 'curves maps to TUNE_CURVE');
-assert(findings[1]!.remediation_directive.action === 'ADD_KNOCKOUT_HALO', 'legibility maps to ADD_KNOCKOUT_HALO');
-assert(findings[2]!.remediation_directive.action === 'ADJUST_CAMERA', 'godview maps to ADJUST_CAMERA');
-assert(findings[3]!.remediation_directive.action === 'STAGGER_ONSET', 'rhythm maps to STAGGER_ONSET');
-assert(findings[4]!.remediation_directive.action === 'MUTATE_PROPERTY', 'saliency maps to MUTATE_PROPERTY');
-assert(findings[5]!.remediation_directive.action === 'ADJUST_LAYOUT', 'framing maps to ADJUST_LAYOUT');
-assert(findings[6]!.remediation_directive.action === 'ADJUST_LAYOUT', 'F04 maps to ADJUST_LAYOUT');
-assert(findings[7]!.remediation_directive.action === 'ADJUST_LAYOUT', 'F05 maps to ADJUST_LAYOUT');
-assert(findings[8]!.remediation_directive.action === 'ADJUST_TIMING', 'F07 maps to ADJUST_TIMING');
-assert(findings[9]!.remediation_directive.action === 'SWAP_PALETTE_TOKEN', 'F12 maps to SWAP_PALETTE_TOKEN');
+// Test all 9 visual instrument mappings
+assert(findings[0]!.rule === 'motion_trajectory_jitter' && findings[0]!.remediation_directive.action === 'TUNE_CURVE', 'Instrument 01 onion maps to TUNE_CURVE');
+assert(findings[1]!.rule === 'camera_geometry_penetration' && findings[1]!.remediation_directive.action === 'ADJUST_CAMERA', 'Instrument 02 godview maps to ADJUST_CAMERA');
+assert(findings[2]!.rule === 'reference_drift' && findings[2]!.remediation_directive.action === 'SWAP_PALETTE_TOKEN', 'Instrument 03 compare maps to SWAP_PALETTE_TOKEN');
+assert(findings[3]!.rule === 'transition_cut_pop' && findings[3]!.remediation_directive.action === 'ADJUST_TIMING', 'Instrument 04 stitch maps to ADJUST_TIMING');
+assert(findings[4]!.rule === 'arrival_impact_kink' && findings[4]!.remediation_directive.action === 'TUNE_CURVE', 'Instrument 05 curves maps to TUNE_CURVE');
+assert(findings[5]!.rule === 'saliency_distraction' && findings[5]!.remediation_directive.action === 'MUTATE_PROPERTY', 'Instrument 06 saliency maps to MUTATE_PROPERTY');
+assert(findings[6]!.rule === 'low_contrast_legibility' && findings[6]!.remediation_directive.action === 'ADD_KNOCKOUT_HALO', 'Instrument 07 legibility maps to ADD_KNOCKOUT_HALO');
+assert(findings[7]!.rule === 'onset_traffic_jam' && findings[7]!.remediation_directive.action === 'STAGGER_ONSET', 'Instrument 08 rhythm maps to STAGGER_ONSET');
+assert(findings[8]!.rule === 'mobile_framing_breach' && findings[8]!.remediation_directive.action === 'ADJUST_LAYOUT', 'Instrument 09 framing maps to ADJUST_LAYOUT');
+
+// Test telemetry rule mappings
+assert(findings[9]!.remediation_directive.action === 'ADJUST_LAYOUT', 'F04 collision maps to ADJUST_LAYOUT');
+assert(findings[10]!.remediation_directive.action === 'ADJUST_LAYOUT', 'F05 clipping maps to ADJUST_LAYOUT');
+assert(findings[11]!.remediation_directive.action === 'ADJUST_TIMING', 'F07 persistence maps to ADJUST_TIMING');
+assert(findings[12]!.remediation_directive.action === 'SWAP_PALETTE_TOKEN', 'F12 off-palette maps to SWAP_PALETTE_TOKEN');
+
+// Verify target_file population
+assert(findings[0]!.remediation_directive.target_file === 'src/scenes/hero.ts', 'target_file correctly populated in directives');
 
 // Test serialization & markdown report
 const jsonOut = AgentHeal.serialize(findings);
 const parsed = JSON.parse(jsonOut);
-assert(parsed.findings.length === 10, 'AgentHeal serializes to valid JSON findings schema');
+assert(parsed.findings.length === 13, 'AgentHeal serializes to valid JSON findings schema');
 
 const mdReport = AgentHeal.formatMarkdownReport(findings);
 assert(mdReport.includes('Autonomous Agent Self-Healing Directive Report') && mdReport.includes('TUNE_CURVE'), 'AgentHeal generates actionable Markdown report');

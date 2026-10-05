@@ -81,8 +81,8 @@ export class SceneGraph {
 
       // If entity has local bounds, project 8 corners of the bounding box
       const wb = e.worldBounds ?? [
-        -e.node.size[0] * 0.5, -e.node.size[1] * 0.5, -e.node.size[2] * 0.5,
-         e.node.size[0] * 0.5,  e.node.size[1] * 0.5,  e.node.size[2] * 0.5,
+        0, 0, 0,
+        e.node.size[0], e.node.size[1], e.node.size[2],
       ];
 
       const corners: V3[] = [

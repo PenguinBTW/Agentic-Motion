@@ -5,6 +5,7 @@
 // - Procedural 3D line geometry via LineBatch
 // - GPU rounded rects, rings, reticles & soft drop shadows via SDFBatch
 // - KineticText typography with knockout halos & numeric rollers
+// - Multi-layer compositing via CompositorGraph
 // - Automatic SceneGraph entity registration and zero-annotation telemetry sync
 import * as THREE from 'three';
 import { defineScene, type SceneContext } from '../engine/dsl';
@@ -55,14 +56,7 @@ export default defineScene({
     // 1. Evaluate CameraRig flight trajectory & synchronize
     ctx.updateCamera(t, progress);
 
-    // 2. Clear render target
-    renderer.setRenderTarget(out);
-    renderer.clear(true, true, true);
-
-    // 3. Render Procedural 3D Particles
-    ctx.particles.render(renderer, ctx.threeCam, out, t);
-
-    // 4. Render Procedural 3D Geometry via LineBatch
+    // 2. Prepare Procedural 3D Geometry via LineBatch
     ctx.lines.clear();
     const ringSegments = 48;
     const ringRadius = 2.2;
@@ -103,9 +97,8 @@ export default defineScene({
         col[0], col[1], col[2], col[3]
       );
     }
-    ctx.lines.render(renderer, out, ctx.threeCam);
 
-    // 5. Update LayoutNode 3D Anchor Pin to top of gyro ring
+    // 3. Update LayoutNode 3D Anchor Pin to top of gyro ring
     const calloutNode = ctx.node('gyro_callout');
     const gyroApexWorld: [number, number, number] = [0, 2.2, 0];
     calloutNode.pinToWorldVertex(gyroApexWorld, ctx.threeCam, {
@@ -114,7 +107,7 @@ export default defineScene({
       maxScale: 1.2,
     });
 
-    // 6. Render 2D Vector Primitives via SDFBatch
+    // 4. Render 2D Vector Primitives via SDFBatch
     ctx.sdf.clear();
 
     // Physical spring entrance with initial velocity v0 for telemetry HUD card
@@ -177,12 +170,12 @@ export default defineScene({
       });
     }
 
-    // 7. Render 2D Kinetic Typography & HUD Overlays
+    // 5. Render 2D Kinetic Typography & HUD Overlays
     ctx.layer2d.clear();
     const c2d = ctx.layer2d.ctx;
 
     // Headline with staggered entrance
-    const heroTitle = ctx.text('hero_title', 'AGENTIC MOTION DESIGN', {
+    ctx.text('hero_title', 'AGENTIC MOTION DESIGN', {
       fontSize: 42,
       fontWeight: 900,
       color: ctx.rgba('bone', 0.98),
@@ -190,7 +183,7 @@ export default defineScene({
       role: 'headline',
     }).withKnockoutHalo(3.5, ctx.rgba('ink', 0.95));
 
-    const subtitle = ctx.text('subtitle', 'DUAL-MODE RIG, 3D ANCHORS & GPU PARTICLES', {
+    ctx.text('subtitle', 'DUAL-MODE RIG, 3D ANCHORS & GPU PARTICLES', {
       fontSize: 16,
       fontWeight: 600,
       color: ctx.rgba('signal', 0.92),
@@ -199,8 +192,8 @@ export default defineScene({
     }).withKnockoutHalo(2.0, ctx.rgba('ink', 0.9));
 
     const titleEnter = ease.outExpo(Math.min(1, progress * 3));
-    heroTitle.render(c2d, t, 80, 140 - (1 - titleEnter) * 30);
-    subtitle.render(c2d, t, 84, 195);
+    ctx.renderText('hero_title', c2d, t, 80, 140 - (1 - titleEnter) * 30);
+    ctx.renderText('subtitle', c2d, t, 84, 195);
 
     // Counter inside card
     if (cardAlpha > 0.01) {
@@ -213,7 +206,7 @@ export default defineScene({
       });
       const pct = Math.round(progress * 100);
       counterText.numericRoll(pct, (n) => `${n}%`);
-      counterText.render(c2d, t, cardX + 54, cardY + cardH / 2 - 14);
+      ctx.renderText('counter', c2d, t, cardX + 54, cardY + cardH / 2 - 14);
 
       // Card details
       c2d.save();
@@ -232,7 +225,7 @@ export default defineScene({
 
     // Callout label
     if (!calloutNode.isOccluded) {
-      const calloutText = ctx.text('callout_label', '3D GYROSCOPE ANCHOR', {
+      ctx.text('callout_label', '3D GYROSCOPE ANCHOR', {
         fontSize: 12,
         fontWeight: 600,
         color: ctx.rgba('bone', 0.9),
@@ -241,7 +234,7 @@ export default defineScene({
       }).withKnockoutHalo(1.5, ctx.rgba('ink', 0.9));
 
       const calloutPos = calloutNode.position;
-      calloutText.render(c2d, t, calloutPos[0] + 16, calloutPos[1] + 24);
+      ctx.renderText('callout_label', c2d, t, calloutPos[0] + 16, calloutPos[1] + 24);
     }
 
     // Bottom telemetry bar
@@ -253,7 +246,31 @@ export default defineScene({
     c2d.fillText('STATUS: MILESTONE 4 COMPLETE | DSL + COMPOSITOR + SCENEGRAPH ACTIVE', 84, H - 56);
     c2d.restore();
 
-    // 8. Flush batches and composite with automatic WebGL state reset
-    ctx.flush(out);
+    // 6. Evaluate Multi-Layer CompositorGraph
+    ctx.compositor.clear();
+    ctx.compositor.createLayer('stage_3d', {
+      render: (target) => {
+        ctx.particles.render(renderer, ctx.threeCam, target, t);
+        ctx.lines.render(renderer, target, ctx.threeCam);
+      },
+      blend: 'normal',
+      opacity: 1.0,
+    });
+
+    ctx.compositor.createLayer('hud_vectors', {
+      render: (target) => {
+        ctx.sdf.flush(renderer, target);
+        const layerTex = ctx.layer2d.upload();
+        ctx.sceneCtx.comp.draw(renderer, layerTex, target, { mode: 'normal', opacity: 1.0 });
+      },
+      blend: 'normal',
+      opacity: 1.0,
+    });
+
+    ctx.compositor.evaluate(renderer, out);
+
+    // 7. Telemetry sync & WebGL state invariant
+    ctx.sceneGraph.syncTelemetry(t);
+    renderer.resetState();
   },
 });

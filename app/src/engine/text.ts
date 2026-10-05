@@ -83,6 +83,34 @@ export class KineticText {
     return this;
   }
 
+  updateStyle(style: Partial<TextStyle>): this {
+    if (style.fontFamily !== undefined) this.style.fontFamily = style.fontFamily;
+    if (style.fontSize !== undefined) this.style.fontSize = style.fontSize;
+    if (style.fontWeight !== undefined) this.style.fontWeight = style.fontWeight;
+    if (style.color !== undefined) this.style.color = style.color;
+    if (style.alpha !== undefined) this.style.alpha = style.alpha;
+    if (style.letterSpacing !== undefined) this.style.letterSpacing = style.letterSpacing;
+    if (style.lineHeight !== undefined) this.style.lineHeight = style.lineHeight;
+    if (style.align !== undefined) this.style.align = style.align;
+    return this;
+  }
+
+  getScreenBounds(x = this.anchorPos[0], y = this.anchorPos[1]): [number, number, number, number] {
+    const effFontSize = this.style.fontSize * (this.is3DAnchored ? this.depthScale : 1.0);
+    const lineH = effFontSize * this.style.lineHeight;
+    const maxLen = this.lines.length > 0 ? Math.max(0, ...this.lines.map((l) => l.length)) : 0;
+    const approxW = maxLen * effFontSize * 0.55;
+    const approxH = Math.max(lineH, this.lines.length * lineH);
+
+    let minX = x;
+    if (this.style.align === 'center') minX -= approxW / 2;
+    if (this.style.align === 'right') minX -= approxW;
+    const maxX = minX + approxW;
+    const minY = y;
+    const maxY = minY + approxH;
+    return [minX, minY, maxX, maxY];
+  }
+
   /**
    * Multi-line layout with maximum width wrapping, tracking, and leading.
    * Strictly preserves explicit newline characters across paragraphs.

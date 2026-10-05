@@ -47,8 +47,63 @@ export class AgentHeal {
    */
   static analyzeSignal(sig: DiagnosticSignal, index = 1): DiagnosticFinding {
     const findingId = `${sig.rule.toUpperCase()}-${String(index).padStart(3, '0')}`;
+    const targetFile = sig.context?.target_file ?? 'src/scenes/hero.ts';
 
     switch (sig.rule) {
+      case 'onion':
+      case 'trajectory_jitter': {
+        return {
+          id: findingId,
+          tier: 'B',
+          rule: 'motion_trajectory_jitter',
+          target_entity: sig.entityId ?? 'motion_element',
+          timestamp: sig.t,
+          remediation_directive: {
+            action: 'TUNE_CURVE',
+            target_file: targetFile,
+            target_line_hint: 'motion.ease or waypoint coordinates',
+            recommended_patch: `motion.ease(t, t0, t1, 'cubic') // Smooth spatial arc curvature`,
+            explanation: `Motion onion exposure reveals irregular spatial velocity stepping or trajectory jitter. Ensure C2 continuity across path waypoints.`,
+          },
+        };
+      }
+
+      case 'compare':
+      case 'visual_drift': {
+        return {
+          id: findingId,
+          tier: 'B',
+          rule: 'reference_drift',
+          target_entity: sig.entityId ?? 'layout_element',
+          timestamp: sig.t,
+          remediation_directive: {
+            action: 'SWAP_PALETTE_TOKEN',
+            target_file: targetFile,
+            target_line_hint: 'palette / layout coordinates',
+            recommended_patch: `fill: [LIN.bone[0], LIN.bone[1], LIN.bone[2], 0.95], x: 80, y: 140 // Re-anchor to design token specification`,
+            explanation: `Rendered frame deviates from design token reference anchor (SSIM < 0.88). Realign color or spatial offset to design system tokens.`,
+          },
+        };
+      }
+
+      case 'stitch':
+      case 'cut_discontinuity': {
+        return {
+          id: findingId,
+          tier: 'A',
+          rule: 'transition_cut_pop',
+          target_entity: sig.entityId ?? 'scene_transition',
+          timestamp: sig.t,
+          remediation_directive: {
+            action: 'ADJUST_TIMING',
+            target_file: targetFile,
+            target_line_hint: 'post.fade or scene boundary timing',
+            recommended_patch: `post.fade = ease.inQuad((t - cutT) / 0.15); // Smooth transition crossfade`,
+            explanation: `Seam stitch inspector detected luminance flash or motion vector snap across transition seam (delta > 25%). Match boundary velocities or apply a 150ms seam dissolve.`,
+          },
+        };
+      }
+
       case 'curves':
       case 'arrival_impact': {
         const impact = sig.value ?? 6.2;
@@ -62,6 +117,7 @@ export class AgentHeal {
           threshold: sig.threshold ?? 5.0,
           remediation_directive: {
             action: 'TUNE_CURVE',
+            target_file: targetFile,
             target_line_hint: 'motion.ease or motion.spring',
             recommended_patch: `motion.spring(t0, t, { freq: 2.8, damping: 0.85, v0: 0.0 }) // Smoothed arrival shoulder`,
             explanation: `Element arrives at rest with abrupt $C^0$ velocity impact (${impact.toFixed(1)}% > 5.0%). Tune spring damping >= 0.82 or soften Bezier cubic exit tangent.`,
@@ -82,6 +138,7 @@ export class AgentHeal {
           threshold: sig.threshold ?? 4.5,
           remediation_directive: {
             action: 'ADD_KNOCKOUT_HALO',
+            target_file: targetFile,
             target_line_hint: '.withKnockoutHalo',
             recommended_patch: `.withKnockoutHalo(3.0, rgba('ink', 0.92))`,
             explanation: `Text contrast falls below WCAG AAA threshold (${contrast.toFixed(2)}:1 < 4.5:1). Apply ink knockout under-stroke or inject localized backdrop scrim.`,
@@ -102,6 +159,7 @@ export class AgentHeal {
           threshold: sig.threshold ?? 0.10,
           remediation_directive: {
             action: 'ADJUST_CAMERA',
+            target_file: targetFile,
             target_line_hint: 'rig.setPath waypoint',
             recommended_patch: `pos: [pos.x, pos.y, pos.z - 0.5], focalLength: 50 // Retract waypoint along gaze normal`,
             explanation: `Camera penetrates near-clip frustum (${dist.toFixed(2)}m < 0.10m). Retract waypoint 0.5m backwards or lengthen focal length.`,
@@ -122,6 +180,7 @@ export class AgentHeal {
           threshold: sig.threshold ?? 3,
           remediation_directive: {
             action: 'STAGGER_ONSET',
+            target_file: targetFile,
             target_line_hint: 'motion.stagger',
             recommended_patch: `const delays = motion.stagger(${count}, 0.35, 'center-out'); // 70ms cascade`,
             explanation: `${count} elements trigger within 20ms window causing perceptual clutter. Disperse arrivals across a 350ms cascade.`,
@@ -142,6 +201,7 @@ export class AgentHeal {
           threshold: sig.threshold ?? 60,
           remediation_directive: {
             action: 'MUTATE_PROPERTY',
+            target_file: targetFile,
             target_line_hint: 'particles.speed or lines.opacity',
             recommended_patch: `particles.speed = 0.5; lines.opacity = 0.25; // Dim peripheral elements`,
             explanation: `Hero element captures only ${share.toFixed(0)}% visual gaze (target >= 60%). Lower peripheral particle velocity and line luminance.`,
@@ -159,6 +219,7 @@ export class AgentHeal {
           timestamp: sig.t,
           remediation_directive: {
             action: 'ADJUST_LAYOUT',
+            target_file: targetFile,
             target_line_hint: 'node.pin',
             recommended_patch: `node.pin = 'top-center'; node.margin = { top: 64 }; // Responsive center anchor`,
             explanation: `Element overflows 9:16 vertical safe zone. Pin to top-center with inward margin.`,
@@ -176,6 +237,7 @@ export class AgentHeal {
           timestamp: sig.t,
           remediation_directive: {
             action: 'ADJUST_LAYOUT',
+            target_file: targetFile,
             target_line_hint: 'y offset / stack',
             recommended_patch: `y: prevY + elementHeight + 24 // Stacking margin clearance`,
             explanation: `Two active typography/card bounding boxes overlap on screen. Increase vertical stacking offset.`,
@@ -193,6 +255,7 @@ export class AgentHeal {
           timestamp: sig.t,
           remediation_directive: {
             action: 'ADJUST_LAYOUT',
+            target_file: targetFile,
             target_line_hint: 'node.setMargins or clamp screen bounds',
             recommended_patch: `node.setMargins({ left: 64, right: 64 })`,
             explanation: `Element extends past screen border (0 or W/H). Pull responsive margins inward by 64px.`,
@@ -210,6 +273,7 @@ export class AgentHeal {
           timestamp: sig.t,
           remediation_directive: {
             action: 'ADJUST_TIMING',
+            target_file: targetFile,
             target_line_hint: 'exit transition',
             recommended_patch: `const exitAlpha = 1 - ease.inQuad(Math.max(0, (lt - 4.0) / 0.5));`,
             explanation: `Element remains active without motion for > 6s. Add a smooth exit fade or spring dismiss.`,
@@ -226,6 +290,7 @@ export class AgentHeal {
           timestamp: sig.t,
           remediation_directive: {
             action: 'SWAP_PALETTE_TOKEN',
+            target_file: targetFile,
             target_line_hint: 'fill / stroke color',
             recommended_patch: `fill: [LIN.bone[0], LIN.bone[1], LIN.bone[2], 0.9] // Use brand token`,
             explanation: `Off-brand color detected outside active design tokens. Bind color to LIN token or rgba('accent').`,
@@ -242,6 +307,7 @@ export class AgentHeal {
           timestamp: sig.t,
           remediation_directive: {
             action: 'MUTATE_PROPERTY',
+            target_file: targetFile,
             recommended_patch: `// Review rule: ${sig.rule}`,
             explanation: `Telemetry rule violation: ${sig.rule} at t = ${sig.t.toFixed(2)}s.`,
           },
