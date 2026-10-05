@@ -16,7 +16,23 @@ Comprehensive guides, CLI flags, visual output specifications, and agent remedia
 * [**04. Transition Seam Stitch Inspector (`04-transition-seam-stitch-inspector.md`)](./04-transition-seam-stitch-inspector.md): False-color green/magenta split-wipe onion overlays and 10-frame filmstrips across scene cut boundaries ($\pm 250\text{ms}$).
 * [**Master Architectural Overview (`visual-diagnostic-tools.md`)](./visual-diagnostic-tools.md): Synthesis document covering cross-instrument architecture, execution performance, and agent decision trees.
 
-### 2. [Motion Analysis Telemetry System (`current-motion-system.md`)](./current-motion-system.md)
+### 2. [Operational Engine Architecture & API Reference (`engine-architecture.md`)](./engine-architecture.md)
+* **Scope**: **100% IMPLEMENTED & VERIFIED**. Comprehensive architectural reference and developer guide for the 12 core engine modules in [`app/src/engine/`](../app/src/engine/):
+  * **Module 1**: Universal Dual-Mode 6-DOF Camera Rig ([`rig.ts`](../app/src/engine/rig.ts))
+  * **Module 2**: Transform Hierarchy & Responsive Layout ([`transform.ts`](../app/src/engine/transform.ts))
+  * **Module 3**: Universal Kinetic Typography Engine ([`text.ts`](../app/src/engine/text.ts))
+  * **Module 4**: Analytic GPU Signed Distance Fields ([`sdf.ts`](../app/src/engine/sdf.ts))
+  * **Module 5**: Universal Motion Bus & Physical Solvers ([`motion.ts`](../app/src/engine/motion.ts))
+  * **Module 6**: Stateless Analytical GPU Particles ([`particles.ts`](../app/src/engine/particles.ts))
+  * **Module 7**: Scoped Render Graph & Track Matte Compositor ([`graph.ts`](../app/src/engine/graph.ts))
+  * **Module 8**: Semantic Scene Graph & Entity Introspection ([`scenegraph.ts`](../app/src/engine/scenegraph.ts))
+  * **Module 9**: Multi-Format Delivery & Headless Export ([`export.ts`](../app/src/engine/export.ts))
+  * **Module 10**: Pluggable Brand Design Token System ([`tokens.ts`](../app/src/engine/tokens.ts))
+  * **Module 11**: Directorial Self-Correction Contract ([`heal.ts`](../app/src/engine/heal.ts))
+  * **Module 12**: Declarative Scene Authoring DSL & Strict Lifecycle ([`dsl.ts`](../app/src/engine/dsl.ts))
+  * Complete scene authoring tutorial, code examples, and automated verification test suite guide.
+
+### 3. [Motion Analysis Telemetry System (`current-motion-system.md`)](./current-motion-system.md)
 * **Scope**: Full-spectrum 60 fps telemetry suite:
   * Engine hooks (`lines.ts`, `engine.ts`, `gl.ts`, `main.ts`).
   * Analytical pixel pipelines ($4 \times 4$ box-filter downsampling, Rec.709 luma, Cooley-Tukey 2D FFT phase correlation flow, Sobel edge density, CIE Lab $\Delta E_{76}$ palette shares).
@@ -25,8 +41,8 @@ Comprehensive guides, CLI flags, visual output specifications, and agent remedia
   * Telemetry rule policy: Universal Motion Graphics Rules (`F04–F08`, `F11–F16`) vs. Lyric-Only Rules (`F01–F03`, `F09`, `F10`).
   * Output artifacts catalog (`report.md`, `findings.json`, `summary.json`, `frames.csv`, `text.csv`, `timeline.png`, `slitscan.png`).
 
-### 3. [Engine Architectural Review & Universal Roadmap v2.4.0 (`engine-review-and-roadmap.md`)](./engine-review-and-roadmap.md)
-* **Scope**: In-depth architectural audit of engine capabilities, analysis of autonomous agent authoring bottlenecks, low-level graphics plumbing solutions, and a 12-module universal motion graphics roadmap:
+### 4. [Engine Architectural Review & Universal Roadmap v2.4.0 (`engine-review-and-roadmap.md`)](./engine-review-and-roadmap.md)
+* **Scope**: Historical specification, gap analysis, and 4-milestone roadmap for the engine overhaul (now 100% completed). Refer to [`engine-architecture.md`](./engine-architecture.md) for the active operational documentation.
   * **Module 1**: Continuous $C^2$ Camera Choreography Rig (`CameraRig`: Bishop frames, SQUAD, $O(1)$ arc-length LUT, isometric mode, lens presets).
   * **Module 2**: Universal Transform Hierarchy & Responsive Layout (`TransformNode` & `LayoutNode`: 3D anchors, safe-zone pins, depth scaling).
   * **Module 3**: Universal Kinetic Typography & Telemetry Bridge (`KineticText`: display titles, numeric rollers, knockout halos, direct telemetry emission).

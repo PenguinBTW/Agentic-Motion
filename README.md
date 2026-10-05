@@ -31,7 +31,40 @@ All visual tools are implemented modularly in `app/scripts/visual/`, keeping `re
 
 ---
 
-## 3. Calibrated Motion Telemetry Engine
+## 3. Universal Procedural Motion Engine (v2.4.0)
+
+The core engine in [`app/src/engine/`](./app/src/engine/) has been overhauled into a decoupled, domain-agnostic motion graphics platform. Complete architectural specifications, API signatures, and authoring guides are detailed in [**`tooling documentation/engine-architecture.md`**](./tooling%20documentation/engine-architecture.md).
+
+### The 12 Operational Engine Modules
+
+```
+app/src/engine/
+├── dsl.ts          # Module 12: Declarative Scene Authoring DSL (defineScene, SceneContext)
+├── rig.ts          # Module 1: Universal Dual-Mode 6-DOF Camera Rig (CameraRig)
+├── transform.ts    # Module 2: Transform Hierarchy & Responsive Layout (TransformNode, LayoutNode)
+├── text.ts         # Module 3: Universal Kinetic Typography Engine (KineticText)
+├── sdf.ts          # Module 4: Analytic GPU Signed Distance Fields (SDFBatch)
+├── motion.ts       # Module 5: Universal Motion Bus & Physical Solvers (MotionBus, motion)
+├── particles.ts    # Module 6: Stateless Analytical GPU Particles (AnalyticalParticles)
+├── graph.ts        # Module 7: Scoped Render Graph & Track Matte Compositor (CompositorGraph)
+├── scenegraph.ts   # Module 8: Semantic Scene Graph & Entity Introspection (SceneGraph)
+├── export.ts       # Module 9: Multi-Format Delivery & Headless Export (ExportPipeline)
+├── tokens.ts       # Module 10: Pluggable Brand Design Token System (DesignTokens)
+└── heal.ts         # Module 11: Directorial Self-Correction Contract (AgentHeal)
+```
+
+### Core Engine Capabilities
+* **Declarative Scene Authoring (`defineScene`)**: Factory pattern providing a boilerplate shield (`SceneContext`) for coding agents—automating primitive instantiation, zero-annotation telemetry synchronization to `window.__pdoom.textProbes`, strict `document.fonts.ready` gating, and WebGL batch flushing with `renderer.resetState()`.
+* **Mathematical Determinism $\text{Frame} = f(t)$**: Closed-form temporal evaluation across all physics, particles, and camera paths. Guarantees bit-identical sampling under sub-frame adaptive motion blur (1 to 324 spp).
+* **Dual-Mode 6-DOF Camera Rig (`CameraRig`)**: Centripetal Catmull-Rom arc-length spline flight, singular-safe orthonormal frames, analytical closed-form trauma shake, and seamless switching between Cinematic Perspective (14mm–200mm) and Technical Isometric projections.
+* **Analytic GPU Vector Plumbing (`SDFBatch`)**: Instanced quad rendering for rounded rectangles with clamped per-corner radii, analytic soft drop shadows, rings with anti-aliased trim paths, and HUD reticles directly on the GPU (bypassing 4K Canvas2D PCIe bottlenecks).
+* **Scoped Compositor Graph (`CompositorGraph`)**: Multi-layer compositing engine with dual-texture alpha/luma track mattes and blend modes (`normal`, `add`, `screen`, `multiply`).
+* **Multi-Format Delivery Pipeline (`ExportPipeline`)**: Automated export presets for transparent Alpha WebM (VP9 + alpha), Apple ProRes 4444 (10-bit + alpha), ProRes 422 HQ, H.264 MP4, and lossless PNG sequences.
+* **Autonomous Self-Healing (`AgentHeal`)**: Translates diagnostic signals from the 9 visual instruments directly into machine-actionable repair directives emitted into `findings.json`.
+
+---
+
+## 4. Calibrated Motion Telemetry Engine
 
 Comprehensive 60 fps telemetry suite analyzing pixel dynamics, canvas text probes, and audio synchronization:
 
@@ -56,7 +89,7 @@ bun scripts/render.ts motion --from 4.0 --to 12.0 --only hero_reveal --out ../ou
 
 ---
 
-## 4. Directory Structure
+## 5. Directory Structure
 
 ```
 Agentic motion design toolset/
@@ -70,12 +103,17 @@ Agentic motion design toolset/
 │
 ├── app/                              # Core procedural motion engine
 │   ├── src/                          # Three.js / WebGL / Canvas2D codebase
-│   │   ├── engine/                   # Camera3D, lines, audio, post-processing
-│   │   ├── scenes/                   # Modular scene implementations
+│   │   ├── engine/                   # 12 core engine modules (rig, sdf, text, dsl, graph, etc.)
+│   │   ├── scenes/                   # Modular scene implementations (demo.ts)
 │   │   └── main.ts                   # Export harness & text probe interceptor
 │   │
-│   └── scripts/                      # Engine scripts
+│   └── scripts/                      # Engine scripts & test suites
 │       ├── render.ts                 # Lean dispatcher (dynamic imports)
+│       ├── test_milestone1.ts        # Milestone 1 verification suite
+│       ├── test_milestone2.ts        # Milestone 2 verification suite
+│       ├── test_milestone3.ts        # Milestone 3 verification suite
+│       ├── test_milestone4.ts        # Milestone 4 verification suite
+│       │
 │       ├── visual/                   # Modular visual diagnostic tools
 │       │   ├── onion.ts              # Multi-exposure chromatic blender
 │       │   ├── godview.ts            # Orthographic schematic renderer
@@ -106,13 +144,14 @@ Agentic motion design toolset/
 │   └── motion-report.md              # Telemetry report specification
 │
 └── tooling documentation/            # Comprehensive engineering & operational documentation
+    ├── engine-architecture.md        # Operational guide & API reference for 12 engine modules (v2.4.0)
     ├── 01-godview-camera-blueprint.md # Operational guide for 3D God-View Blueprint
     ├── 02-multi-exposure-motion-onion.md # Operational guide for Multi-Exposure Motion Onion
     ├── 03-visual-ab-reference-anchor.md # Operational guide for Visual A/B Reference Anchor
     ├── 04-transition-seam-stitch-inspector.md # Operational guide for Transition Seam Stitch
     ├── visual-diagnostic-tools.md    # Master architecture guide for the 4 visual instruments
     ├── current-motion-system.md      # Detailed motion pipeline architecture
-    ├── engine-review-and-roadmap.md  # Universal engine architecture & roadmap (v2.4.0)
+    ├── engine-review-and-roadmap.md  # Historical roadmap & audit notes
     └── README.md
 ```
 
