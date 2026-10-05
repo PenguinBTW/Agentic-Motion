@@ -6,11 +6,13 @@ import type { AudioData, AudioSample } from './audio';
 import type { Lyrics } from './lyrics';
 import type { Compositor } from './gl';
 import type { PostParams } from './post';
+import type { TimelineDriver } from './driver';
 
 export interface SceneCtx {
   renderer: THREE.WebGLRenderer;
   audio: AudioData;
   lyrics: Lyrics;
+  driver?: TimelineDriver;
   comp: Compositor;
   W: number;
   H: number;

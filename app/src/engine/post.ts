@@ -35,6 +35,8 @@ export interface PostParams {
   shake: [number, number]; // frame offset in px
   zoom: number; // frame zoom (1 = none), for punch-ins on hits
   invert: number; // 0..1 invert (ink <-> bone), applied before grain
+  /** Whether to output transparent alpha channel (for WebM/ProRes overlays). */
+  transparent?: boolean;
   /** Replace the HUD P(doom) digits (e.g. 'NaN'). */
   pdoomText?: string;
   /** 0..1 glitch the HUD readout. */
@@ -53,6 +55,7 @@ export const DEFAULT_POST: PostParams = {
   vignette: 0.35,
   hud: 1,
   frame: 0,
+  transparent: false,
   pdoom: 0,
   paper: 0,
   fade: 0,
@@ -124,6 +127,7 @@ ${SCALE === 1 ? `        c += texture(src, vUv + texel * vec2(-1, -1)).rgb; c +=
     this.final = new FSPass(/* glsl */ `
       uniform sampler2D src; uniform sampler2D bloomTex; uniform sampler2D haloTex; uniform sampler2D hudTex;
       uniform float exposure, bloom, halation, ca, grain, vignette, hud, fade, flash, time, zoom, invert;
+      uniform bool transparent;
       uniform vec2 shake; uniform vec2 res;
       ${SHOULDER_GLSL}
       void main() {
@@ -131,10 +135,15 @@ ${SCALE === 1 ? `        c += texture(src, vUv + texel * vec2(-1, -1)).rgb; c +=
         vec2 dc = uv - 0.5;
         float r2 = dot(dc * vec2(res.x / res.y, 1.0), dc * vec2(res.x / res.y, 1.0));
         vec2 off = dc * r2 * ca / res.x * 4.0;
+        vec4 srcCol = texture(src, uv);
+        float srcAlpha = srcCol.a;
+        // Un-premultiply src color for tone-mapping and color grading if translucent
+        vec3 straightCol = srcCol.rgb / max(srcAlpha, 1e-4);
+
         vec3 col;
-        col.r = texture(src, uv + off).r;
-        col.g = texture(src, uv).g;
-        col.b = texture(src, uv - off).b;
+        col.r = texture(src, uv + off).r / max(texture(src, uv + off).a, 1e-4);
+        col.g = straightCol.g;
+        col.b = texture(src, uv - off).b / max(texture(src, uv - off).a, 1e-4);
         vec3 bl = texture(bloomTex, uv).rgb;
         vec3 ha = texture(haloTex, uv).rgb;
         col += bl * bloom;
@@ -146,11 +155,16 @@ ${SCALE === 1 ? `        c += texture(src, vUv + texel * vec2(-1, -1)).rgb; c +=
         col = shoulder(col);
         col = mix(col, vec3(0.8515) - col * 0.84, invert); // ink<->bone in linear-ish space
         col += C_BONE * flash;
-        // vignette
+        // vignette (gated by alpha when transparent)
         float v = smoothstep(0.95, 0.25, length(dc * vec2(1.0, 0.8)));
-        col *= mix(1.0, v, vignette);
+        float vAmt = transparent ? (vignette * srcAlpha) : vignette;
+        col *= mix(1.0, v, vAmt);
         col *= (1.0 - fade);
         vec3 s = toSRGB(sat(col));
+        // Compute composite alpha factoring HUD and bloom luminosity
+        float hudA = h.a * hud;
+        float bloomA = clamp(luma(bl * bloom) * 0.5, 0.0, 1.0);
+        float finalAlpha = clamp(srcAlpha + hudA * (1.0 - srcAlpha) + bloomA * (1.0 - srcAlpha), 0.0, 1.0);
         // film grain: two scales, stronger in mid-tones
 ${SCALE === 1 ? `        float g1 = hash12(gl_FragCoord.xy + fract(time * 13.37) * 1000.0) - 0.5;
         float g2 = hash12(floor(gl_FragCoord.xy / 2.0) + fract(time * 7.13) * 1000.0) - 0.5;` : `        // output scale > 1: the fine grain is per physical px with its amplitude raised by PX_SCALE so its
@@ -159,14 +173,19 @@ ${SCALE === 1 ? `        float g1 = hash12(gl_FragCoord.xy + fract(time * 13.37)
         float g2 = hash12(floor(FRAG_PX / 2.0) + fract(time * 7.13) * 1000.0) - 0.5;`}
         float lm = luma(s);
         float amt = grain * (0.55 + 1.2 * lm * (1.0 - lm));
-        s += (g1 * 0.6 + g2 * 0.4) * amt;
-        s += (hash12(gl_FragCoord.xy * 1.37 + time) - 0.5) / 255.0; // dither
-        fragColor = vec4(sat(s), 1.0);
+        float grainScale = transparent ? finalAlpha : 1.0;
+        s += (g1 * 0.6 + g2 * 0.4) * amt * grainScale;
+        s += ((hash12(gl_FragCoord.xy * 1.37 + time) - 0.5) / 255.0) * grainScale; // dither
+        if (transparent) {
+          fragColor = vec4(sat(s) * finalAlpha, finalAlpha);
+        } else {
+          fragColor = vec4(sat(s), 1.0);
+        }
       }`, {
       src: { value: null }, bloomTex: { value: null }, haloTex: { value: null }, hudTex: { value: null },
       exposure: { value: 1 }, bloom: { value: 0.5 }, halation: { value: 0.2 }, ca: { value: 1 }, grain: { value: 0.05 },
       vignette: { value: 0.3 }, hud: { value: 1 }, fade: { value: 0 }, flash: { value: 0 }, time: { value: 0 },
-      zoom: { value: 1 }, invert: { value: 0 }, shake: { value: new THREE.Vector2() }, res: { value: new THREE.Vector2(W, H) },
+      zoom: { value: 1 }, invert: { value: 0 }, transparent: { value: false }, shake: { value: new THREE.Vector2() }, res: { value: new THREE.Vector2(W, H) },
     });
   }
 
@@ -212,6 +231,7 @@ ${SCALE === 1 ? `        float g1 = hash12(gl_FragCoord.xy + fract(time * 13.37)
     f.time!.value = time;
     f.zoom!.value = p.zoom;
     f.invert!.value = p.invert;
+    f.transparent!.value = Boolean(p.transparent);
     const sx = Array.isArray(p.shake) ? (p.shake[0] ?? 0) : (typeof p.shake === 'number' ? (p.shake as number) : 0);
     const sy = Array.isArray(p.shake) ? (p.shake[1] ?? 0) : 0;
     (f.shake!.value as THREE.Vector2).set(sx, sy);

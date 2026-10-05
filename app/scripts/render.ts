@@ -157,15 +157,16 @@ async function video(page: Page, from: number, to: number, fps: number, out: str
   const gpuEncode = flag('gpu-encode') || (mode === 'video' && flag('gpu'));
   const crf = opt('crf', gpuEncode ? '22' : '16')!;
   const audio = path.join(ROOT, 'audio/whos-holding-on-to-who.mp3');
+  const hasAudio = !flag('noaudio') && existsSync(audio);
   const args = ['ffmpeg', '-y', '-loglevel', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${OW}x${OH}`, '-r', String(fps), '-i', 'pipe:0'];
-  if (!flag('noaudio')) args.push('-ss', String(from), '-t', String(to - from), '-i', audio);
+  if (hasAudio) args.push('-ss', String(from), '-t', String(to - from), '-i', audio);
   if (gpuEncode) {
     const enc = opt('gpu-encoder', 'h264_amf')!;
     args.push('-vf', 'vflip', '-c:v', enc, '-quality', 'quality', '-rc', 'cqp', '-qp_i', crf, '-qp_p', crf, '-pix_fmt', 'yuv420p');
   } else {
     args.push('-vf', 'vflip', '-c:v', 'libx264', '-preset', opt('preset', 'slow')!, '-crf', crf, '-pix_fmt', 'yuv420p', '-tune', 'grain', '-x264-params', opt('x264', 'aq-mode=3')!);
   }
-  if (!flag('noaudio')) args.push('-c:a', 'aac', '-b:a', '320k', '-shortest');
+  if (hasAudio) args.push('-c:a', 'aac', '-b:a', '320k', '-shortest');
   args.push('-movflags', '+faststart', out);
   const ff = Bun.spawn(args, { stdin: 'pipe', stdout: 'inherit', stderr: 'inherit' });
   let frames = 0;

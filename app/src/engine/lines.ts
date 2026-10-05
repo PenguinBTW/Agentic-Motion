@@ -145,6 +145,7 @@ export class LineBatch {
     this.mat.uniforms.pxScale!.value = s;
     renderer.setRenderTarget(target);
     renderer.render(this.scene, camera ?? this.cam2D);
+    renderer.resetState();
     for (const at of this.attrs) at.clearUpdateRanges();
   }
 }

@@ -18,6 +18,12 @@ export interface AudioSample {
   kick: number; snare: number; hat: number; vonset: number;
 }
 
+export const DUMMY_AUDIO_SAMPLE: AudioSample = {
+  rms: 0, low: 0, mid: 0, high: 0,
+  vocal: 0, drums: 0, bass: 0, other: 0,
+  kick: 0, snare: 0, hat: 0, vonset: 0,
+};
+
 const FEATURES = ['rms', 'low', 'mid', 'high', 'vocal', 'drums', 'bass', 'other'] as const;
 
 export class AudioData {
@@ -29,6 +35,8 @@ export class AudioData {
   private fps: number;
   private feat: Record<string, Float32Array> = {};
   onsets: Record<string, [number, number][]>;
+
+  isDummy = false;
 
   constructor(j: AudioJSON) {
     this.duration = j.duration;
@@ -42,12 +50,36 @@ export class AudioData {
     this.onsets = j.onsets ?? {};
   }
 
+  static createDummy(duration = 5.0, bpm = 120): AudioData {
+    const beatSec = 60 / bpm;
+    const beats: number[] = [];
+    for (let t = 0; t <= duration; t += beatSec) beats.push(t);
+    const downbeats: number[] = [];
+    for (let t = 0; t <= duration; t += beatSec * 4) downbeats.push(t);
+    const d = new AudioData({
+      duration,
+      bpm,
+      fps: 60,
+      beats,
+      downbeats,
+      sections: [{ name: 'main', start: 0, end: duration }],
+      features: {},
+      onsets: {},
+    });
+    d.isDummy = true;
+    return d;
+  }
+
   static async load(): Promise<AudioData> {
     for (const url of ['data/audio.json', 'data/audio.approx.json']) {
-      const r = await fetch(url);
-      if (r.ok && (r.headers.get('content-type') ?? '').includes('json')) return new AudioData(await r.json());
+      try {
+        const r = await fetch(url);
+        if (r.ok && (r.headers.get('content-type') ?? '').includes('json')) return new AudioData(await r.json());
+      } catch {}
     }
-    throw new Error('no audio analysis data found');
+    // Fall back to dummy driver data instead of hard-crashing
+    console.warn('[AudioData] No audio analysis data found; falling back to synthetic 120bpm clock.');
+    return AudioData.createDummy();
   }
 
   /** Linear-interpolated envelope value at time t. */

@@ -36,12 +36,19 @@ export class Lyrics {
     this.words.forEach((w, i) => (w.gi = i));
   }
 
+  static createEmpty(): Lyrics {
+    return new Lyrics({ lines: [] });
+  }
+
   static async load(): Promise<Lyrics> {
     for (const url of ['data/lyrics.json', 'data/lyrics.approx.json']) {
-      const r = await fetch(url);
-      if (r.ok && (r.headers.get('content-type') ?? '').includes('json')) return new Lyrics(await r.json());
+      try {
+        const r = await fetch(url);
+        if (r.ok && (r.headers.get('content-type') ?? '').includes('json')) return new Lyrics(await r.json());
+      } catch {}
     }
-    throw new Error('no lyrics data found');
+    console.warn('[Lyrics] No lyrics data found; continuing in non-lyric motion mode.');
+    return Lyrics.createEmpty();
   }
 
   /** The line being sung at t (or null in gaps). */

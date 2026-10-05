@@ -231,11 +231,30 @@ function setupPlayer() {
   let t = FROM ?? 0;
   let playing = false;
   let loop: [number, number] | null = null;
-  let lastAudioT = 0, lastPerf = 0;
-  const seek = (x: number) => { t = Math.max(0, Math.min(engine.duration - 0.001, x)); audio.currentTime = t; };
+  let lastAudioT = 0, lastPerf = performance.now();
+  let audioAvailable = false;
+  audio.addEventListener('canplaythrough', () => { audioAvailable = true; });
+  audio.addEventListener('error', () => { audioAvailable = false; });
+
+  const seek = (x: number) => {
+    t = Math.max(0, Math.min(engine.duration - 0.001, x));
+    lastPerf = performance.now();
+    if (audioAvailable && !audio.error) audio.currentTime = t;
+  };
   seek(t);
 
-  const toggle = () => { playing = !playing; if (playing) { audio.currentTime = t; audio.play(); } else audio.pause(); };
+  const toggle = () => {
+    playing = !playing;
+    lastPerf = performance.now();
+    if (playing) {
+      if (audioAvailable && !audio.error) {
+        audio.currentTime = t;
+        audio.play().catch(() => { audioAvailable = false; });
+      }
+    } else {
+      if (audioAvailable && !audio.error) audio.pause();
+    }
+  };
   canvas.onclick = toggle;
   scrub.oninput = () => seek(parseFloat(scrub.value));
   window.addEventListener('keydown', (ev) => {
@@ -256,12 +275,21 @@ function setupPlayer() {
   let frames = 0, fpsT = performance.now(), fps = 0;
   const tick = () => {
     if (playing) {
-      // smooth the coarse audio clock with performance.now()
       const now = performance.now();
-      if (audio.currentTime !== lastAudioT) { lastAudioT = audio.currentTime; lastPerf = now; }
-      t = lastAudioT + (audio.paused ? 0 : (now - lastPerf) / 1000);
+      if (audioAvailable && !audio.error && !audio.paused) {
+        if (audio.currentTime !== lastAudioT) { lastAudioT = audio.currentTime; lastPerf = now; }
+        t = lastAudioT + (now - lastPerf) / 1000;
+        if (audio.ended) playing = false;
+      } else {
+        const dt = (now - lastPerf) / 1000;
+        lastPerf = now;
+        t += dt;
+        if (t >= engine.duration) {
+          if (loop) seek(loop[0]);
+          else { t = engine.duration; playing = false; }
+        }
+      }
       if (loop && t >= loop[1]) seek(loop[0]);
-      if (audio.ended) playing = false;
     }
     engine.render(t, 1 / 60);
     scrub.value = String(t);

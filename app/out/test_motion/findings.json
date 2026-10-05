@@ -1,0 +1,46 @@
+[
+  {
+    "id": "F16-001",
+    "tool": "motion",
+    "rule": "F16",
+    "tier": "tier_a_objective",
+    "source": "objective",
+    "class": "blocking",
+    "severity": "fail",
+    "t0": 0,
+    "t1": 1.9833333333333334,
+    "evidenceFiles": [
+      "strip_cut_0.00.png",
+      "rgbtime_cut_0.00.png",
+      "events/cut_0.00.csv"
+    ],
+    "ruleDescription": "Near-black or near-white screen run > 0.3s outside --allow-blank",
+    "evidence": "near-black segment of 1.98s outside --allow-blank (> 0.3s)",
+    "calibrated": false,
+    "limits": "Cannot distinguish intentional blackout pauses from rendering failure without --allow-blank.",
+    "waived": false,
+    "waiverReason": null
+  },
+  {
+    "id": "F13-001",
+    "tool": "motion",
+    "rule": "F13",
+    "tier": "tier_a_objective",
+    "source": "objective",
+    "class": "advisory",
+    "severity": "warn",
+    "t0": 0,
+    "t1": 0,
+    "evidenceFiles": [
+      "strip_cut_0.00.png",
+      "rgbtime_cut_0.00.png",
+      "events/cut_0.00.csv"
+    ],
+    "ruleDescription": "Frame render time > 25 ms (GPU-synced playback bottleneck)",
+    "evidence": "frame time 62.4ms exceeded 25.0ms budget",
+    "calibrated": false,
+    "limits": "Includes Playwright readback overhead and headless Chrome software/hardware scheduling.",
+    "waived": false,
+    "waiverReason": null
+  }
+]

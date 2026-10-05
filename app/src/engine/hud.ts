@@ -86,7 +86,7 @@ export interface HudState {
 export class Hud {
   layer = new Layer2D();
   private ink = false;
-  constructor(public pdoom: PDoom, public captions: Caption[]) {}
+  constructor(public pdoom?: PDoom | null, public captions: Caption[] = []) {}
 
   draw(t: number, st: HudState) {
     const L = this.layer;
@@ -96,7 +96,7 @@ export class Hud {
     c.globalAlpha = st.opacity;
     this.ink = st.paper > 0.5;
     if (st.frame > 0.001) this.cropMarks(c, st.frame);
-    if (st.readout > 0.001) { c.save(); c.globalAlpha *= st.readout; this.readout(c, t, st); c.restore(); }
+    if (this.pdoom && st.readout > 0.001) { c.save(); c.globalAlpha *= st.readout; this.readout(c, t, st); c.restore(); }
     this.caption(c, t);
     return L.upload();
   }
@@ -118,6 +118,7 @@ export class Hud {
   }
 
   private readout(c: CanvasRenderingContext2D, t: number, st: HudState) {
+    if (!this.pdoom) return;
     const v = this.pdoom.value(t);
     const fl = this.pdoom.flash(t);
     const x = 64, y = H - 66;

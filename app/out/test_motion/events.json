@@ -1,0 +1,30 @@
+[
+  {
+    "type": "cut",
+    "t": 0,
+    "source": "timeline",
+    "details": {
+      "id": "demo"
+    }
+  },
+  {
+    "type": "downbeat",
+    "t": 0.288,
+    "source": "audio.json"
+  },
+  {
+    "type": "beat",
+    "t": 0.288,
+    "source": "audio.json"
+  },
+  {
+    "type": "beat",
+    "t": 0.864,
+    "source": "audio.json"
+  },
+  {
+    "type": "beat",
+    "t": 1.44,
+    "source": "audio.json"
+  }
+]

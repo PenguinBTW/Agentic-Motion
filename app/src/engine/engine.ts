@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { AudioData } from './audio';
 import { Lyrics } from './lyrics';
+import { type TimelineDriver, ClockDriver, AudioDriver } from './driver';
 import { Compositor, FSPass, W, H, PW, PH, SCALE, SS_TAP, makeRT, clearRT } from './gl';
 import { DEFAULT_POST, Post, SHOULDER_GLSL, type PostParams } from './post';
 import { Hud, PDoom, type Caption } from './hud';
@@ -87,9 +88,10 @@ export class Engine {
   hudOff = false;
 
   timeline: TimelineEntry[] = [];
+  driver!: TimelineDriver;
 
-  constructor(public canvas: HTMLCanvasElement, private makeTimeline: (lyrics: Lyrics, audio: AudioData) => TimelineEntry[]) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
+  constructor(public canvas: HTMLCanvasElement, private makeTimeline?: ((lyrics?: Lyrics | null, audio?: AudioData | null, driver?: TimelineDriver) => TimelineEntry[]) | null) {
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(1);
     this.renderer.setSize(PW, PH, false);
     this.renderer.autoClear = false;
@@ -107,7 +109,7 @@ export class Engine {
     const am = this.accum.mat;
     am.blendEquation = THREE.AddEquation;
     am.blendSrc = THREE.OneFactor; am.blendDst = THREE.OneFactor;
-    am.blendSrcAlpha = THREE.ZeroFactor; am.blendDstAlpha = THREE.OneFactor;
+    am.blendSrcAlpha = THREE.OneFactor; am.blendDstAlpha = THREE.OneFactor;
     // sampling error: per block of B x B physical px (2x2 logical), how far the displayed average moves when a
     // step's new sub-frames (2n, summed in b) are merged with the n before them (summed in a): 2/3 of the gap
     const B = 2 * SCALE, ew = Math.ceil(PW / B), eh = Math.ceil(PH / B), R = 16;
@@ -142,16 +144,45 @@ export class Engine {
       }`, { e: { value: null } });
   }
 
-  async init(only?: (e: TimelineEntry) => boolean) {
-    [this.audio, this.lyrics] = await Promise.all([AudioData.load(), Lyrics.load(), loadFonts(), loadStrokeFonts()]) as [AudioData, Lyrics, void, void];
-    this.timeline = this.makeTimeline(this.lyrics, this.audio);
-    this.ctx = { renderer: this.renderer, audio: this.audio, lyrics: this.lyrics, comp: this.comp, W, H, id: '', params: {}, start: 0, end: 0 };
+  async init(only?: (e: TimelineEntry) => boolean, driver?: TimelineDriver) {
+    if (typeof document !== 'undefined' && (document as any).fonts?.ready) {
+      try {
+        await (document as any).fonts.ready;
+      } catch {}
+    }
+    await Promise.allSettled([loadFonts(), loadStrokeFonts()]);
+
+    try {
+      this.audio = await AudioData.load();
+    } catch {
+      this.audio = AudioData.createDummy();
+    }
+
+    try {
+      this.lyrics = await Lyrics.load();
+    } catch {
+      this.lyrics = Lyrics.createEmpty();
+    }
+
+    if (this.driver) {
+      // already assigned
+    } else if (driver) {
+      this.driver = driver;
+    } else if (this.audio && !this.audio.isDummy && this.audio.duration > 0) {
+      this.driver = new AudioDriver(this.audio);
+    } else {
+      this.driver = new ClockDriver(5.0);
+    }
+
+    this.timeline = this.makeTimeline ? this.makeTimeline(this.lyrics, this.audio, this.driver) : [];
+    this.ctx = { renderer: this.renderer, audio: this.audio, lyrics: this.lyrics, driver: this.driver, comp: this.comp, W, H, id: '', params: {}, start: 0, end: 0 };
     this.post = new Post();
     const captions: Caption[] = this.timeline.filter((e) => e.caption).map((e) => {
       const d = e.caption!.delay ?? 0.3;
       return { start: e.start + d, end: e.start + d + (e.caption!.dur ?? 4.5), fig: e.caption!.fig, text: e.caption!.text };
     });
-    this.hud = new Hud(new PDoom(this.lyrics), captions);
+    const pdoom = (this.lyrics && this.lyrics.words && this.lyrics.words.length > 0) ? new PDoom(this.lyrics) : null;
+    this.hud = new Hud(pdoom, captions);
     const entries = only ? this.timeline.filter(only) : this.timeline;
     await Promise.all(entries.map((e) => this.loadEntry(e)));
   }
@@ -180,7 +211,9 @@ export class Engine {
     this.lastT = -1;
   }
 
-  get duration() { return this.audio.duration; }
+  get duration() {
+    return this.driver?.duration ?? (this.timeline.length > 0 ? this.timeline[this.timeline.length - 1]!.end : 5.0);
+  }
 
   private frameFor(e: TimelineEntry, t: number, dt: number, seeked: boolean, preroll: boolean, under: THREE.Texture | null, tin: number, tout: number): Frame {
     const beat = this.audio.beatAt(t), bar = this.audio.barAt(t);
