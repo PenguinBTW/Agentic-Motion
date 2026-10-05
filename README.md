@@ -1,4 +1,9 @@
-# Agentic Motion Design Toolset
+# f(x) Studio
+**This project is licensed under the PolyForm Small Business License 1.0.0 [`LICENSE.md`](./LICENSE.md).. This grants non-commercial parties full use of the software and allows small businesses under the defined revenue and employee thresholds to use it under the same terms.**
+
+**For commerical Licensing beyond these threasholds email *vio@penguinbtw.com***
+
+---
 
 A production-grade, agent-accessible boilerplate and diagnostic inspection toolkit for procedural 60 fps WebGL/Canvas2D motion design across **any domain**—commercial product reveals, UI/UX interaction showcases, kinetic typography sequences, procedural data visualizations, brand identity resolves, and audiovisual productions.
 
