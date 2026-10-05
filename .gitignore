@@ -28,4 +28,3 @@ Thumbs.db
 # Logs and TypeScript build metadata
 *.log
 *.tsbuildinfo
-*.gitgnore
