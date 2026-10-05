@@ -148,4 +148,9 @@ export class LineBatch {
     renderer.resetState();
     for (const at of this.attrs) at.clearUpdateRanges();
   }
+
+  dispose(): void {
+    this.geo.dispose();
+    this.mat.dispose();
+  }
 }

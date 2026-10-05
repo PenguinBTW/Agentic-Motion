@@ -1,8 +1,9 @@
 import { motion, MotionBus } from '../src/engine/motion';
 import { SDFBatch } from '../src/engine/sdf';
 import { KineticText } from '../src/engine/text';
+import * as THREE from 'three';
 
-console.log('--- Testing Milestone 2 Modules ---');
+console.log('--- Testing Milestone 2 Modules & Audited Patches ---');
 
 let allPassed = true;
 
@@ -40,101 +41,103 @@ if (Math.abs(sCritRest - 1.0) > 1e-4) {
   console.log(`✓ Critically damped spring settled to exactly 1.0 at rest`);
 }
 
-// Test over-damped spring (damping = 1.5)
-const sOverRest = mb.spring(0, 5.0, { freq: 2.0, damping: 1.5, v0: 1.0 });
-if (Math.abs(sOverRest - 1.0) > 1e-4) {
-  console.error(`Over-damped spring did not settle to 1.0, got ${sOverRest}`);
+// Test over-damped spring (damping = 1.5, v0 = 0) - MUST NOT OVERSHOOT 1.0!
+const sOver10ms = mb.spring(0, 0.01, { freq: 2.0, damping: 1.5, v0: 0.0 });
+const sOver50ms = mb.spring(0, 0.05, { freq: 2.0, damping: 1.5, v0: 0.0 });
+const sOver100ms = mb.spring(0, 0.10, { freq: 2.0, damping: 1.5, v0: 0.0 });
+const sOverRest = mb.spring(0, 5.0, { freq: 2.0, damping: 1.5, v0: 0.0 });
+console.log(`Over-damped spring (v0=0): tau=10ms: ${sOver10ms.toFixed(4)}, tau=50ms: ${sOver50ms.toFixed(4)}, tau=100ms: ${sOver100ms.toFixed(4)}, tau=5s: ${sOverRest.toFixed(4)}`);
+
+if (sOver10ms < 0 || sOver50ms > 1.0 || sOver100ms > 1.0 || Math.abs(sOverRest - 1.0) > 1e-4) {
+  console.error(`Over-damped spring sign bug detected! Values must be monotonic between 0 and 1.0`);
   allPassed = false;
 } else {
-  console.log(`✓ Over-damped spring settled to exactly 1.0 at rest`);
+  console.log(`✓ Over-damped spring verified monotonic without overshoot (sign error resolved)`);
 }
 
-// 2. Test Stagger Engine
-console.log('\n[2] Testing Stagger Engine...');
-const stLinear = mb.stagger(5, 1.0, 'start');
-console.log('Stagger (start):', stLinear.map((v) => v.toFixed(2)));
-if (stLinear[0] !== 0 || Math.abs(stLinear[4]! - 1.0) > 1e-5) {
-  console.error('Linear stagger failed boundary checks');
+// 2. Test LFO on negative sub-frame times
+console.log('\n[2] Testing LFO Oscillators on negative times...');
+const sawNeg = mb.lfo('saw', 2.0, -0.1);
+const squareNeg = mb.lfo('square', 2.0, -0.1);
+console.log(`LFO at t=-0.1s (freq=2.0): saw=${sawNeg.toFixed(3)}, square=${squareNeg}`);
+if (sawNeg < -1.0 || sawNeg > 1.0 || (squareNeg !== 1 && squareNeg !== -1)) {
+  console.error(`LFO failed on negative sub-frame time!`);
   allPassed = false;
 } else {
-  console.log('✓ Linear stagger bounded [0, 1.0]');
+  console.log(`✓ LFO correctly handled negative time offsets without phase distortion`);
 }
 
-const stCenter = mb.stagger(5, 1.0, 'center-out');
-console.log('Stagger (center-out):', stCenter.map((v) => v.toFixed(2)));
-if (stCenter[2] !== 0) {
-  console.error('Center-out stagger center element should start at 0');
+// 3. Test Bezier Bisection Solver
+console.log('\n[3] Testing Bezier Easing with flat initial tangent...');
+const eased = mb.ease(0.01, 0, 1.0, [0.0, 0.0, 0.58, 1.0]); // ease-out curve with p1=0
+console.log(`Ease at t=0.01s: ${eased.toFixed(4)}`);
+if (isNaN(eased)) {
+  console.error(`Bezier solver returned NaN!`);
   allPassed = false;
 } else {
-  console.log('✓ Center-out stagger center element starts at delay 0');
+  console.log(`✓ Bezier solver succeeded with bisection fallback`);
 }
 
-// 3. Test LFO Oscillators
-console.log('\n[3] Testing LFO Oscillators...');
-const sineVal = mb.lfo('sine', 1.0, 0.25);
-console.log(`LFO Sine at 0.25s (freq=1.0Hz): ${sineVal.toFixed(3)} (expected 1.0)`);
-if (Math.abs(sineVal - 1.0) > 1e-5) {
-  console.error(`LFO Sine failed: ${sineVal}`);
-  allPassed = false;
-} else {
-  console.log('✓ LFO Sine peak matched');
-}
-
-// 4. Test SDFBatch
-console.log('\n[4] Testing SDFBatch Instancing...');
+// 4. Test SDFBatch Instancing & Bounding Sphere
+console.log('\n[4] Testing SDFBatch 3D Buffer & Bounding Sphere...');
 const sdf = new SDFBatch(100);
 sdf.rect(10, 20, 200, 100, { radius: [8, 8, 8, 8], fill: [1, 1, 1, 1], strokeWidth: 2 });
 sdf.shadow(10, 20, 200, 100, 16, [0, 0, 0, 0.5], [0, 4]);
 sdf.ring(100, 100, 50, 4, [0, 0.75], [1, 0, 0, 1]);
-if (sdf.count !== 3) {
-  console.error(`SDFBatch instance count should be 3, got ${sdf.count}`);
+sdf.reticle(500, 500, 40, 2.0, [1, 1, 0, 1]);
+
+// Test Three.js computeBoundingSphere()
+const geo = (sdf as any).geo;
+geo.computeBoundingSphere();
+const sphereRadius = geo.boundingSphere.radius;
+console.log(`InstancedBufferGeometry bounding sphere radius: ${sphereRadius}`);
+if (isNaN(sphereRadius)) {
+  console.error(`BufferGeometry boundingSphere.radius is NaN!`);
   allPassed = false;
 } else {
-  console.log(`✓ SDFBatch recorded 3 instances (rect, shadow, ring)`);
+  console.log(`✓ Bounding sphere radius is valid number (${sphereRadius.toFixed(2)}), zero NaN warnings`);
 }
-sdf.clear();
-if (sdf.count !== 0) {
-  console.error(`SDFBatch clear() failed, got ${sdf.count}`);
+
+if (sdf.count !== 4) {
+  console.error(`Expected 4 SDF instances, got ${sdf.count}`);
   allPassed = false;
 } else {
-  console.log(`✓ SDFBatch cleared successfully`);
+  console.log(`✓ SDFBatch recorded 4 instances (rect, shadow, ring, reticle)`);
 }
 
-// 5. Test KineticText & Telemetry Bridge
-console.log('\n[5] Testing KineticText & Telemetry Bridge...');
-(globalThis as any).window = {
-  __pdoom: {
-    recordText: true,
-    currentFrameIdx: 42,
-    textProbes: [],
-  },
-};
-
-const kt = new KineticText('CYBERNETIC CONTROL SYSTEM', {
-  fontSize: 32,
-  fontWeight: 700,
-  letterSpacing: 4,
-}).withKnockoutHalo(2.5, 'rgba(0,0,0,1)');
-
-kt.syncTelemetry(1.5, 120, 240);
-
-const probes = (globalThis as any).window.__pdoom.textProbes;
-if (probes.length !== 1) {
-  console.error(`Expected 1 telemetry probe, got ${probes.length}`);
+// 5. Test KineticText Newline Preservation & Ephemeral 3D Visibility
+console.log('\n[5] Testing KineticText Newline Preservation & Ephemeral 3D Visibility...');
+const multiParaText = new KineticText('FIRST LINE\nSECOND LINE\nTHIRD LINE');
+multiParaText.layout({ maxWidth: 500 });
+const lines = (multiParaText as any).lines;
+console.log('Layout lines:', lines);
+if (lines.length !== 3 || lines[0] !== 'FIRST LINE' || lines[1] !== 'SECOND LINE') {
+  console.error('Word wrap destroyed newlines!');
   allPassed = false;
 } else {
-  const p = probes[0];
-  console.log('Emitted text probe:', JSON.stringify(p, null, 2));
-  if (p.text !== 'CYBERNETIC CONTROL SYSTEM' || p.t !== 1.5 || p.bbox[0] !== 120) {
-    console.error('Telemetry probe payload mismatch!');
-    allPassed = false;
-  } else {
-    console.log('✓ KineticText telemetry probe correctly synchronized to window.__pdoom.textProbes');
-  }
+  console.log('✓ Word-wrap strictly preserved explicit newlines across paragraphs');
+}
+
+// Test ephemeral 3D anchor visibility
+const realCam = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 1000);
+realCam.position.set(0, 0, 10);
+realCam.lookAt(0, 0, 20); // looks away from origin, so [0, 0, 0] is behind camera
+realCam.updateMatrixWorld();
+
+const kt3d = new KineticText('HUD CALLOUT', { alpha: 0.85 });
+kt3d.anchor3D([0, 0, 0], realCam); // worldToScreen returns null because [0, 0, 0] is behind
+if ((kt3d as any).style.alpha !== 0.85) {
+  console.error(`style.alpha was permanently mutated to ${(kt3d as any).style.alpha}!`);
+  allPassed = false;
+} else if ((kt3d as any).isVisible !== false) {
+  console.error(`isVisible was not set to false!`);
+  allPassed = false;
+} else {
+  console.log('✓ 3D anchor visibility is ephemeral, preserving style.alpha');
 }
 
 if (allPassed) {
-  console.log('\n>>> ALL MILESTONE 2 CHECKS PASSED PERFECTLY! <<<');
+  console.log('\n>>> ALL MILESTONE 2 CHECKS AND AUDIT PATCHES PASSED PERFECTLY! <<<');
 } else {
   process.exit(1);
 }

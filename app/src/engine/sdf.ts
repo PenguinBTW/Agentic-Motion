@@ -24,9 +24,9 @@ export interface SDFShadowOpts {
 const VERT = /* glsl */ `
 precision highp float;
 
-in vec2 position;          // quad corner in [-1, 1]
+in vec3 position;          // quad corner in [-1, 1], z=0
 in vec4 iBounds;           // logical [x, y, w, h] (x, y is top-left)
-in vec4 iParams;           // [type (0=rect, 1=ring, 2=shadow), strokeWidth, trimStart, trimEnd]
+in vec4 iParams;           // [type (0=rect, 1=ring, 2=shadow, 3=reticle), strokeWidth, trimStart, trimEnd]
 in vec4 iRadii;            // [rTL, rTR, rBR, rBL] or for shadow: [radius, blur, dx, dy]
 in vec4 iFillColor;        // linear RGBA
 in vec4 iStrokeColor;      // linear RGBA
@@ -54,17 +54,17 @@ void main() {
 
   // Expand quad bounds for anti-aliasing fringe (+2px), stroke width, and drop shadow blur
   float padding = max(strokeW * 0.5, 0.0) + 2.0;
-  if (shapeType > 1.5) { // shadow
+  if (shapeType > 1.5 && shapeType < 2.5) { // shadow
     float blur = iRadii.y;
     padding += blur * 2.5;
     center += iRadii.zw; // apply shadow offset to quad center
   }
 
   vec2 quadHalfExtent = halfSize + vec2(padding);
-  vec2 logicalPos = center + position * quadHalfExtent;
+  vec2 logicalPos = center + position.xy * quadHalfExtent;
 
   // Pass local position and half extent to fragment shader
-  vLocal = position * quadHalfExtent;
+  vLocal = position.xy * quadHalfExtent;
   vHalfSize = halfSize;
 
   // Convert to clip space [-1, 1] with Y pointing up in WebGL
@@ -88,10 +88,12 @@ out vec4 fragColor;
 const float PI = 3.14159265358979323846;
 const float TAU = 6.28318530717958647692;
 
-// Analytical rounded box SDF with per-corner radius
+// Analytical rounded box SDF with per-corner radius clamped to half dimensions
 float sdRoundedBox(vec2 p, vec2 b, vec4 r) {
+  float maxR = min(b.x, b.y);
   // r: [TL, TR, BR, BL]. Top has y < 0, Bottom has y > 0
-  float rad = (p.x > 0.0) ? ((p.y > 0.0) ? r.z : r.y) : ((p.y > 0.0) ? r.w : r.x);
+  float rawRad = (p.x > 0.0) ? ((p.y > 0.0) ? r.z : r.y) : ((p.y > 0.0) ? r.w : r.x);
+  float rad = min(maxR, rawRad);
   vec2 q = abs(p) - (b - vec2(rad));
   return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - rad;
 }
@@ -119,7 +121,6 @@ void main() {
     if (strokeW > 0.001 && vStrokeColor.a > 0.001) {
       float dStroke = abs(d + strokeW * 0.5) - strokeW * 0.5;
       float strokeAlpha = clamp(0.5 - dStroke / aa, 0.0, 1.0) * vStrokeColor.a;
-      // Over composite stroke atop fill
       vec3 sRgb = vStrokeColor.rgb * strokeAlpha;
       col.rgb = sRgb + col.rgb * (1.0 - strokeAlpha);
       col.a = strokeAlpha + col.a * (1.0 - strokeAlpha);
@@ -135,15 +136,16 @@ void main() {
       float d = abs(distToCenter - (r - strokeW * 0.5)) - strokeW * 0.5;
       float alpha = clamp(0.5 - d / aa, 0.0, 1.0);
 
-      // Angular trim path
+      // Angular trim path with smooth anti-aliased caps
       if (trimEnd < 0.999 || trimStart > 0.001) {
-        float angle = atan(vLocal.y, vLocal.x); // [-PI, PI]
-        float u = fract(angle / TAU + 0.25);   // [0, 1], starting from top (12 o'clock)
+        float angle = atan(vLocal.y, vLocal.x);
+        float u = fract(angle / TAU + 0.25);
+        float capAa = max(aa / (TAU * max(r, 1.0)), 0.002);
         float dTrim = 1.0;
         if (trimStart < trimEnd) {
-          dTrim = step(trimStart, u) * step(u, trimEnd);
+          dTrim = smoothstep(trimStart - capAa, trimStart + capAa, u) * (1.0 - smoothstep(trimEnd - capAa, trimEnd + capAa, u));
         } else {
-          dTrim = max(step(trimStart, u), step(u, trimEnd));
+          dTrim = max(smoothstep(trimStart - capAa, trimStart + capAa, u), 1.0 - smoothstep(trimEnd - capAa, trimEnd + capAa, u));
         }
         alpha *= dTrim;
       }
@@ -156,17 +158,33 @@ void main() {
       float alpha = clamp(0.5 - d / aa, 0.0, 1.0) * vFillColor.a;
       col = vec4(vFillColor.rgb * alpha, alpha);
     }
-  } else {
+  } else if (shapeType < 2.5) {
     // ------------------------------------------------------------- 2: Soft Drop Shadow
-    // vRadii: [radius, blur, dx, dy]
+    // Standard-compliant GLSL ES smoothstep (edge0 < edge1)
     float cornerR = vRadii.x;
     float blur = max(vRadii.y, 0.5);
     vec4 radii = vec4(cornerR);
     float d = sdRoundedBox(vLocal, vHalfSize, radii);
 
-    // Analytic Gaussian-like soft shadow profile
-    float shadowAlpha = smoothstep(blur * 1.5, -blur * 0.5, d) * vFillColor.a;
+    float shadowAlpha = (1.0 - smoothstep(-blur * 0.5, blur * 1.5, d)) * vFillColor.a;
     col = vec4(vFillColor.rgb * shadowAlpha, shadowAlpha);
+  } else {
+    // ------------------------------------------------------------- 3: Reticle Widget
+    float r = vHalfSize.x;
+    float dist = length(vLocal);
+    float aa = max(fwidth(dist), 0.7);
+
+    // Outer circle
+    float dCircle = abs(dist - r) - strokeW * 0.5;
+    float aCircle = clamp(0.5 - dCircle / aa, 0.0, 1.0);
+
+    // Crosshair ticks
+    float dCross = min(abs(vLocal.x), abs(vLocal.y)) - strokeW * 0.5;
+    float inCross = step(length(vLocal), r * 1.35) * (1.0 - step(length(vLocal), r * 0.45));
+    float aCross = clamp(0.5 - dCross / aa, 0.0, 1.0) * inCross;
+
+    float alpha = clamp(aCircle + aCross, 0.0, 1.0) * vStrokeColor.a;
+    col = vec4(vStrokeColor.rgb * alpha, alpha);
   }
 
   if (col.a <= 0.0001) discard;
@@ -193,16 +211,16 @@ export class SDFBatch {
   constructor(public readonly capacity = 2048) {
     this.geo = new THREE.InstancedBufferGeometry();
 
-    // Quad geometry covering [-1, 1]
+    // Quad geometry covering [-1, 1] with itemSize: 3 (eliminates Three.js boundingSphere NaN)
     const quadVertices = new Float32Array([
-      -1, -1,
-       1, -1,
-       1,  1,
-      -1, -1,
-       1,  1,
-      -1,  1,
+      -1, -1, 0,
+       1, -1, 0,
+       1,  1, 0,
+      -1, -1, 0,
+       1,  1, 0,
+      -1,  1, 0,
     ]);
-    this.geo.setAttribute('position', new THREE.BufferAttribute(quadVertices, 2));
+    this.geo.setAttribute('position', new THREE.BufferAttribute(quadVertices, 3));
 
     this.boundsArr = new Float32Array(capacity * 4);
     this.paramsArr = new Float32Array(capacity * 4);
@@ -411,6 +429,41 @@ export class SDFBatch {
   }
 
   /**
+   * Draw an analytic HUD reticle / crosshair target
+   */
+  reticle(cx: number, cy: number, radius: number, thickness = 1.5, color: [number, number, number, number] = [1, 1, 1, 1], glow = 1.0): void {
+    if (this.count >= this.capacity) return;
+    const idx = this.count++;
+
+    const d = radius * 2.8;
+    this.boundsArr[idx * 4 + 0] = cx - d * 0.5;
+    this.boundsArr[idx * 4 + 1] = cy - d * 0.5;
+    this.boundsArr[idx * 4 + 2] = d;
+    this.boundsArr[idx * 4 + 3] = d;
+
+    // Params: [type=3, strokeWidth, 0, 1]
+    this.paramsArr[idx * 4 + 0] = 3;
+    this.paramsArr[idx * 4 + 1] = thickness;
+    this.paramsArr[idx * 4 + 2] = 0;
+    this.paramsArr[idx * 4 + 3] = 1;
+
+    this.radiiArr[idx * 4 + 0] = radius;
+    this.radiiArr[idx * 4 + 1] = radius;
+    this.radiiArr[idx * 4 + 2] = radius;
+    this.radiiArr[idx * 4 + 3] = radius;
+
+    this.fillArr[idx * 4 + 0] = 0;
+    this.fillArr[idx * 4 + 1] = 0;
+    this.fillArr[idx * 4 + 2] = 0;
+    this.fillArr[idx * 4 + 3] = 0;
+
+    this.strokeArr[idx * 4 + 0] = color[0] * glow;
+    this.strokeArr[idx * 4 + 1] = color[1] * glow;
+    this.strokeArr[idx * 4 + 2] = color[2] * glow;
+    this.strokeArr[idx * 4 + 3] = color[3];
+  }
+
+  /**
    * Flush batch into render target. Enforces WebGL State Cache Invariant.
    */
   render(renderer: THREE.WebGLRenderer, target: THREE.WebGLRenderTarget | null): void {
@@ -433,6 +486,11 @@ export class SDFBatch {
     renderer.resetState();
 
     for (const at of this.attrs) at.clearUpdateRanges();
+  }
+
+  /** Alias for render() matching Roadmap DSL specifications */
+  flush(renderer: THREE.WebGLRenderer, target: THREE.WebGLRenderTarget | null): void {
+    this.render(renderer, target);
   }
 
   dispose(): void {

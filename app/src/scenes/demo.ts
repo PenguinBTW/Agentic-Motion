@@ -1,25 +1,31 @@
-// Milestone 2 Showcase Scene: Procedural Vectors, Analytic SDFs & Telemetry
-// Exercises SDFBatch (GPU rounded rects, rings, trim paths, soft drop shadows),
-// MotionBus (analytical springs with initial velocity v0, stagger, LFOs),
-// KineticText (typographic hierarchy, knockout halos, telemetry bridge),
-// and 3D camera pinhole math with zero external audio/lyric dependencies.
+// Milestone 3 Showcase Scene: Spatial Hierarchies, Dual-Mode Camera & Analytical Particles
+// Exercises CameraRig (centripetal Catmull-Rom arc-length spline flight, trauma shake),
+// LayoutNode (responsive 3D anchor pinning & safe-zone viewport alignment),
+// AnalyticalParticles (stateless deterministic closed-form GPU emitters),
+// SDFBatch (GPU rounded rects, rings, reticles, soft shadows), and KineticText.
 import * as THREE from 'three';
 import { Scene, type Frame } from '../engine/scene';
+import { CameraRig } from '../engine/rig';
+import { LayoutNode } from '../engine/transform';
+import { AnalyticalParticles } from '../engine/particles';
 import { LineBatch } from '../engine/lines';
 import { SDFBatch } from '../engine/sdf';
 import { KineticText } from '../engine/text';
 import { motion } from '../engine/motion';
 import { Layer2D, W, H } from '../engine/gl';
-import { K, lerpKey, camFromKey } from '../engine/camera3d';
-import { ViewportSpace } from '../engine/viewport';
 import { rgba, LIN } from '../engine/palette';
 import { ease, TAU } from '../engine/util';
 
 export default class DemoScene extends Scene {
+  private rig = new CameraRig('perspective');
+  private particles = new AnalyticalParticles(1024);
   private lines = new LineBatch(2048, { screen2D: false, blend: 'normal' });
   private sdf = new SDFBatch(2048);
   private layer2d = new Layer2D();
   private threeCam = new THREE.PerspectiveCamera(50, W / H, 0.1, 1000);
+
+  // Responsive Layout & 3D Anchor
+  private gyroCallout = new LayoutNode('gyro_callout');
 
   // Kinetic typography nodes
   private heroTitle = new KineticText('AGENTIC MOTION DESIGN', {
@@ -29,7 +35,7 @@ export default class DemoScene extends Scene {
     letterSpacing: 6,
   }).withKnockoutHalo(3.5, rgba('ink', 0.95));
 
-  private subtitle = new KineticText('PROCEDURAL VECTOR ENGINE & ANALYTIC SDFs', {
+  private subtitle = new KineticText('DUAL-MODE RIG, 3D ANCHORS & GPU PARTICLES', {
     fontSize: 16,
     fontWeight: 600,
     color: rgba('signal', 0.92),
@@ -43,13 +49,36 @@ export default class DemoScene extends Scene {
     align: 'center',
   });
 
-  // 3D camera keyframes
-  private k0 = K([0, 1.8, -8.0], [0, 0, 0], 0, 950);
-  private k1 = K([3.5, 2.2, -7.0], [0, 0, 0], 0.08, 950);
-  private k2 = K([0, 0.5, -6.5], [0, 0, 0], 0, 1100);
+  private calloutText = new KineticText('3D GYROSCOPE ANCHOR', {
+    fontSize: 12,
+    fontWeight: 600,
+    color: rgba('bone', 0.9),
+    letterSpacing: 1,
+  }).withKnockoutHalo(1.5, rgba('ink', 0.9));
 
   override async init(): Promise<void> {
-    // Pure procedural setup
+    // 1. Configure CameraRig with smooth centripetal Catmull-Rom flight path
+    this.rig.setLensMm(45);
+    this.rig.setPath([
+      { t: 0.0, pos: [0, 1.8, -8.0], target: [0, 0, 0], roll: 0, focalLength: 45 },
+      { t: 0.5, pos: [3.5, 2.2, -7.0], target: [0, 0, 0], roll: 0.08, focalLength: 48 },
+      { t: 1.0, pos: [0, 0.6, -6.5], target: [0, 0, 0], roll: 0, focalLength: 52 },
+    ]);
+
+    // 2. Add stateless analytical particle emitter at origin
+    this.particles.addEmitter('gyro_core', {
+      capacity: 384,
+      origin: [0, 0, 0],
+      direction: [0, 1, 0],
+      speed: 1.2,
+      spread: 0.6,
+      lifetime: 2.2,
+      gravity: [0, -0.3, 0],
+      turbulence: 0.25,
+      size: 0.05,
+      color: [LIN.ember[0], LIN.ember[1], LIN.ember[2], 0.85],
+      glow: 1.8,
+    });
   }
 
   override render(f: Frame, out: THREE.WebGLRenderTarget): void {
@@ -57,23 +86,19 @@ export default class DemoScene extends Scene {
     const t = f.t;
     const progress = Math.min(1, Math.max(0, f.p));
 
-    // 1. Evaluate smooth 3D camera trajectory
-    let key: ReturnType<typeof lerpKey>;
-    if (progress < 0.5) {
-      const u = ease.inOutCubic(progress * 2);
-      key = lerpKey(this.k0, this.k1, u);
-    } else {
-      const u = ease.inOutCubic((progress - 0.5) * 2);
-      key = lerpKey(this.k1, this.k2, u);
-    }
-    const cam = camFromKey(key);
-    ViewportSpace.camToThreeCamera(cam, this.threeCam, W, H);
+    // 1. Evaluate CameraRig flight trajectory along arc length
+    this.rig.evalPath(progress);
+    const cam = this.rig.evalCam(t, f.dt);
+    this.rig.syncToThreeCamera(cam, this.threeCam);
 
     // 2. Clear render target
     renderer.setRenderTarget(out);
     renderer.clear(true, true, true);
 
-    // 3. Render Procedural 3D Geometry via LineBatch
+    // 3. Render Procedural 3D Particles
+    this.particles.render(renderer, this.threeCam, out, t);
+
+    // 4. Render Procedural 3D Geometry via LineBatch
     this.lines.clear();
 
     const ringSegments = 48;
@@ -118,7 +143,15 @@ export default class DemoScene extends Scene {
 
     this.lines.render(renderer, out, this.threeCam);
 
-    // 4. Render 2D Vector Primitives via SDFBatch
+    // 5. Update LayoutNode 3D Anchor Pin to top of gyro ring
+    const gyroApexWorld: [number, number, number] = [0, 2.2, 0];
+    this.gyroCallout.pinToWorldVertex(gyroApexWorld, this.threeCam, {
+      screenOffset: [0, -32],
+      minScale: 0.7,
+      maxScale: 1.2,
+    });
+
+    // 6. Render 2D Vector Primitives via SDFBatch
     this.sdf.clear();
 
     // Physical spring entrance with initial velocity v0 for the telemetry HUD card
@@ -152,9 +185,15 @@ export default class DemoScene extends Scene {
       this.sdf.ring(gaugeCx, gaugeCy, gaugeRadius, 4.0, [0, gaugeTrim], [LIN.signal[0], LIN.signal[1], LIN.signal[2], cardAlpha], 1.2);
     }
 
-    this.sdf.render(renderer, out);
+    // Reticle on 3D anchor if visible
+    if (!this.gyroCallout.isOccluded) {
+      const calloutPos = this.gyroCallout.position;
+      this.sdf.reticle(calloutPos[0], calloutPos[1] + 32, 12, 1.25, [LIN.signal[0], LIN.signal[1], LIN.signal[2], 0.85]);
+    }
 
-    // 5. Render 2D Kinetic Typography & HUD Overlays
+    this.sdf.flush(renderer, out);
+
+    // 7. Render 2D Kinetic Typography & HUD Overlays
     this.layer2d.clear();
     const ctx = this.layer2d.ctx;
 
@@ -180,8 +219,14 @@ export default class DemoScene extends Scene {
       ctx.font = '400 11px "IBMPlexMono", monospace';
       ctx.fillText(`FRAME: ${(progress * 300).toFixed(0)} / 300`, cardX + 112, cardY + 58);
       ctx.fillText(`SPRING: ${cardEntrance.toFixed(2)} (v0=2.5)`, cardX + 112, cardY + 78);
-      ctx.fillText(`STATUS: SDF GPU PIXEL-AA`, cardX + 112, cardY + 98);
+      ctx.fillText(`RIG: CATMULL-ROM C1`, cardX + 112, cardY + 98);
       ctx.restore();
+    }
+
+    // Render 3D pinned callout label
+    if (!this.gyroCallout.isOccluded) {
+      const calloutPos = this.gyroCallout.position;
+      this.calloutText.render(ctx, t, calloutPos[0] + 16, calloutPos[1] + 24);
     }
 
     // Bottom telemetry bar
@@ -190,7 +235,7 @@ export default class DemoScene extends Scene {
     ctx.font = '400 13px "IBMPlexMono", monospace';
     ctx.letterSpacing = '1px';
     ctx.fillText(`TIME: ${t.toFixed(3)}s | PROGRESS: ${(progress * 100).toFixed(1)}% | CLOSED-FORM f(t)`, 84, H - 80);
-    ctx.fillText('STATUS: MILESTONE 2 COMPLETE | SDF BATCH + MOTION BUS + KINETIC TEXT', 84, H - 56);
+    ctx.fillText('STATUS: MILESTONE 3 COMPLETE | RIG + TRANSFORMS + PARTICLES ACTIVE', 84, H - 56);
     ctx.restore();
 
     // Composite 2D layer
@@ -199,8 +244,9 @@ export default class DemoScene extends Scene {
   }
 
   override dispose(): void {
-    this.lines.geo.dispose();
-    this.lines.mat.dispose();
+    this.rig = null as any;
+    this.particles.dispose();
+    this.lines.dispose();
     this.sdf.dispose();
     this.layer2d.texture.dispose();
   }

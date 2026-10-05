@@ -53,11 +53,8 @@ export class KineticText {
   private lines: string[] = [];
   private anchorPos: [number, number] = [0, 0];
   private is3DAnchored = false;
+  private isVisible = true;
   private depthScale = 1.0;
-
-  // Cached layout dimensions
-  private totalWidth = 0;
-  private totalHeight = 0;
 
   constructor(text: string, style: TextStyle = {}) {
     this.rawText = text;
@@ -75,7 +72,8 @@ export class KineticText {
   }
 
   /**
-   * Multi-line layout with maximum width wrapping, tracking, and leading
+   * Multi-line layout with maximum width wrapping, tracking, and leading.
+   * Strictly preserves explicit newline characters across paragraphs.
    */
   layout(opts: { maxWidth?: number; align?: 'left' | 'center' | 'right'; tracking?: number; leading?: number } = {}): this {
     if (opts.align) this.style.align = opts.align;
@@ -87,42 +85,51 @@ export class KineticText {
       return this;
     }
 
-    // Word wrap based on approximate character widths
-    const words = this.rawText.split(/\s+/);
-    const lines: string[] = [];
-    let currentLine = '';
-
+    const paragraphs = this.rawText.split('\n');
+    const wrappedLines: string[] = [];
     const approxCharWidth = this.style.fontSize * 0.55;
-    for (const w of words) {
-      const testLine = currentLine.length === 0 ? w : `${currentLine} ${w}`;
-      if (testLine.length * approxCharWidth > opts.maxWidth && currentLine.length > 0) {
-        lines.push(currentLine);
-        currentLine = w;
-      } else {
-        currentLine = testLine;
+
+    for (const para of paragraphs) {
+      if (para.trim().length === 0) {
+        wrappedLines.push('');
+        continue;
       }
+      const words = para.split(/\s+/);
+      let currentLine = '';
+
+      for (const w of words) {
+        const testLine = currentLine.length === 0 ? w : `${currentLine} ${w}`;
+        if (testLine.length * approxCharWidth > opts.maxWidth && currentLine.length > 0) {
+          wrappedLines.push(currentLine);
+          currentLine = w;
+        } else {
+          currentLine = testLine;
+        }
+      }
+      if (currentLine.length > 0) wrappedLines.push(currentLine);
     }
-    if (currentLine.length > 0) lines.push(currentLine);
-    this.lines = lines;
+
+    this.lines = wrappedLines;
     return this;
   }
 
   /**
-   * 3D Spatial Anchoring & Billboarding with depth-attenuated scale
+   * 3D Spatial Anchoring & Billboarding with depth-attenuated scale.
+   * Modulates visibility ephemerally without mutating style.alpha.
    */
   anchor3D(worldPos: V3, cam: THREE.Camera, opts: { billboard?: boolean; minPx?: number; maxPx?: number } = {}): this {
     const proj = ViewportSpace.worldToScreen(worldPos, cam);
     if (!proj) {
       this.is3DAnchored = false;
-      this.style.alpha = 0;
+      this.isVisible = false;
       return this;
     }
 
     this.is3DAnchored = true;
+    this.isVisible = true;
     this.anchorPos = [proj[0], proj[1]];
 
     const depthZ = Math.max(0.1, proj[2]);
-    // Standard perspective scaling: reference depth = 5.0m
     let scale = 5.0 / depthZ;
     if (opts.minPx && this.style.fontSize * scale < opts.minPx) scale = opts.minPx / this.style.fontSize;
     if (opts.maxPx && this.style.fontSize * scale > opts.maxPx) scale = opts.maxPx / this.style.fontSize;
@@ -200,16 +207,18 @@ export class KineticText {
 
   /**
    * Direct Telemetry Emission Bridge
-   * Writes bounding boxes and text metrics directly to window.__pdoom.textProbes
+   * Writes bounding boxes and text metrics directly to window.__pdoom.textProbes.
+   * Protected against empty lines and preview memory leaks.
    */
   syncTelemetry(t: number, screenX = this.anchorPos[0], screenY = this.anchorPos[1]): void {
     if (typeof window === 'undefined') return;
     const P = (window as any).__pdoom;
-    if (!P || !P.textProbes || !P.recordText) return;
+    if (!P || !P.probe || !P.textProbes || !P.recordText) return;
 
     const effFontSize = this.style.fontSize * (this.is3DAnchored ? this.depthScale : 1.0);
     const lineH = effFontSize * this.style.lineHeight;
-    const approxW = Math.max(...this.lines.map((l) => l.length)) * effFontSize * 0.55;
+    const maxLen = this.lines.length > 0 ? Math.max(0, ...this.lines.map((l) => l.length)) : 0;
+    const approxW = maxLen * effFontSize * 0.55;
     const approxH = this.lines.length * lineH;
 
     let minX = screenX;
@@ -239,10 +248,11 @@ export class KineticText {
   }
 
   /**
-   * Render text onto a Canvas2D context (with halo and alignment)
+   * Render text onto a Canvas2D context (with optional halo and alignment).
+   * Automatically handles probe deduplication to prevent false F04 collision flags.
    */
-  render(ctx: CanvasRenderingContext2D, t: number, x = this.anchorPos[0], y = this.anchorPos[1]): void {
-    if (this.style.alpha <= 0.001) return;
+  render(ctx: CanvasRenderingContext2D, t: number, x = this.anchorPos[0], y = this.anchorPos[1], staggerStates?: TextUnitState[]): void {
+    if (!this.isVisible || this.style.alpha <= 0.001) return;
 
     const effFontSize = this.style.fontSize * (this.is3DAnchored ? this.depthScale : 1.0);
     const lineH = effFontSize * this.style.lineHeight;
@@ -258,29 +268,55 @@ export class KineticText {
       ctx.letterSpacing = this.style.letterSpacing;
     }
 
-    // 1. Draw Knockout Halo Under-stroke (if enabled)
-    if (this.halo) {
-      ctx.strokeStyle = this.halo.haloColor;
-      ctx.lineWidth = this.halo.strokePx * 2;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
+    if (staggerStates && staggerStates.length > 0) {
+      // Staggered Unit Rendering
+      for (const st of staggerStates) {
+        if (st.alpha <= 0.001) continue;
+        ctx.save();
+        ctx.globalAlpha *= st.alpha * this.style.alpha;
+        const unitY = y + st.offsetY;
+
+        if (this.halo) {
+          ctx.strokeStyle = this.halo.haloColor;
+          ctx.lineWidth = this.halo.strokePx * 2;
+          ctx.lineJoin = 'round';
+          ctx.strokeText(st.text, x, unitY);
+        }
+
+        ctx.fillStyle = this.style.color;
+        ctx.fillText(st.text, x, unitY);
+        ctx.restore();
+      }
+    } else {
+      // Standard Multi-line Rendering
+      // 1. Draw Knockout Halo Under-stroke (if enabled)
+      if (this.halo) {
+        ctx.strokeStyle = this.halo.haloColor;
+        ctx.lineWidth = this.halo.strokePx * 2;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        for (let i = 0; i < this.lines.length; i++) {
+          const lineY = y + i * lineH;
+          ctx.strokeText(this.lines[i]!, x, lineY);
+        }
+      }
+
+      // 2. Draw Primary Text Fill
+      ctx.fillStyle = this.style.color;
+      ctx.globalAlpha *= this.style.alpha;
       for (let i = 0; i < this.lines.length; i++) {
         const lineY = y + i * lineH;
-        ctx.strokeText(this.lines[i]!, x, lineY);
+        ctx.fillText(this.lines[i]!, x, lineY);
       }
-    }
-
-    // 2. Draw Primary Text Fill
-    ctx.fillStyle = this.style.color;
-    ctx.globalAlpha *= this.style.alpha;
-    for (let i = 0; i < this.lines.length; i++) {
-      const lineY = y + i * lineH;
-      ctx.fillText(this.lines[i]!, x, lineY);
     }
 
     ctx.restore();
 
-    // Synchronize telemetry for headless analyzers and visual diagnostic tools
-    this.syncTelemetry(t, x, y);
+    // Only emit direct telemetry if Canvas2D text probe hook is NOT active
+    // This prevents double-counting and eliminates false F04 typographic collisions.
+    const P = typeof window !== 'undefined' ? (window as any).__pdoom : null;
+    if (!P?.probe) {
+      this.syncTelemetry(t, x, y);
+    }
   }
 }

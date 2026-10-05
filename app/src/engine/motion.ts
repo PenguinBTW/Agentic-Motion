@@ -56,7 +56,7 @@ export class MotionBus {
       const omegaR = omegaN * Math.sqrt(zeta * zeta - 1);
       const s1 = -zeta * omegaN + omegaR;
       const s2 = -zeta * omegaN - omegaR;
-      const c1 = (v0 - s2) / (s1 - s2);
+      const c1 = (v0 + s2) / (s1 - s2);
       const c2 = -1 - c1;
       const deviation = c1 * Math.exp(s1 * tau) + c2 * Math.exp(s2 * tau);
       return (1 + deviation) * scale;
@@ -117,9 +117,10 @@ export class MotionBus {
 
   /**
    * 4. Procedural LFO Oscillators for Ambient Animation and Silent Sequences
+   * Uses floor-based phase calculation to remain robust under negative sub-frame times.
    */
   lfo(wave: LFOWaveform, frequencyHz: number, t: number): number {
-    const phase = (t * frequencyHz) % 1;
+    const phase = t * frequencyHz - Math.floor(t * frequencyHz);
     switch (wave) {
       case 'sine':
         return Math.sin(t * frequencyHz * TAU);
@@ -148,16 +149,23 @@ export class MotionBus {
   }
 
   /**
-   * Newton-Raphson solver for cubic bezier curve B(t) = [x(t), y(t)]
+   * Newton-Raphson solver for cubic bezier curve B(t) = [x(t), y(t)] with bisection fallback
    */
   private solveCubicBezier(xTarget: number, x1: number, y1: number, x2: number, y2: number): number {
-    // Solve x(t) = xTarget for t in [0, 1]
     let t = xTarget;
+    let lo = 0, hi = 1;
+
     for (let i = 0; i < 8; i++) {
       const currentX = this.bezierVal(t, x1, x2) - xTarget;
       if (Math.abs(currentX) < 1e-5) break;
       const dX = this.bezierDeriv(t, x1, x2);
-      if (Math.abs(dX) < 1e-5) break;
+      if (Math.abs(dX) < 1e-5) {
+        // Fallback to binary bisection search
+        t = (lo + hi) * 0.5;
+        if (this.bezierVal(t, x1, x2) < xTarget) lo = t;
+        else hi = t;
+        continue;
+      }
       t -= currentX / dX;
     }
     return this.bezierVal(clamp(t, 0, 1), y1, y2);

@@ -19,11 +19,8 @@ export function makeTimeline(
   au?: AudioData | null,
   driver?: TimelineDriver,
 ): TimelineEntry[] {
-  // If an explicit non-audio driver is provided, honor its duration.
-  // Otherwise, if real audio data exists, use its duration; else default to 5.0s for demo scenes.
-  const duration = (driver && driver.id !== 'audio')
-    ? driver.duration
-    : (au && !au.isDummy && au.duration > 0 ? au.duration : 5.0);
+  // Default procedural demo sequence duration is 5.0s
+  const duration = (driver && driver.id === 'clock') ? driver.duration : 5.0;
 
   // Default procedural timeline entry
   const entries: TimelineEntry[] = [
