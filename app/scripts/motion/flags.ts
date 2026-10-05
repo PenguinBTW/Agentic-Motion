@@ -42,8 +42,11 @@ export function evaluateFlags(
   hits: HitItem[],
   allowBlankRanges: [number, number][],
   audioEvents: AudioEvent[] = [],
-  calibration: CalibrationData | null = null
+  calibration: CalibrationData | null = null,
+  waivers: Record<string, string> = {}
 ): FlagItem[] {
+  if (frames.length === 0) return [];
+
   const flags: FlagItem[] = [];
   const flagCounters: Record<string, number> = {};
 
@@ -60,6 +63,8 @@ export function evaluateFlags(
     const count = (flagCounters[rule] ?? 0) + 1;
     flagCounters[rule] = count;
     const id = `${rule}-${String(count).padStart(3, '0')}`;
+    const waiverReason = waivers[id] ?? waivers[rule] ?? null;
+    const waived = Boolean(waiverReason);
     flags.push({
       id,
       rule,
@@ -73,8 +78,8 @@ export function evaluateFlags(
       evidence,
       calibrated,
       limits: meta.limits,
-      waived: false,
-      waiverReason: null,
+      waived,
+      waiverReason,
     });
   }
 
@@ -106,67 +111,66 @@ export function evaluateFlags(
   // TIER B (Calibrated): F01, F02, F03 (Lyric synchronization & sizing)
   // -------------------------------------------------------------
 
-  // F01: lyric word visible for < 90% of its sung window
-  // F01: lyric word visible for < min of Example project
-  // Calibrated against Example project lyricVisiblePct distribution
+  // F01: lyric word visible for < 90% of its sung window (or calibrated min)
   const calF01 = (calibration?.lyricVisiblePct && calibration.lyricVisiblePct.n > 0) ? calibration.lyricVisiblePct : null;
-  const threshF01 = calF01 ? calF01.min : null;
-  if (threshF01 !== null) {
-    for (const w of textAnalysis.words) {
-      if (w.visible_during_sung_pct < threshF01) {
-        const sev: Severity = w.visible_during_sung_pct < 50.0 ? 'warn' : 'info';
-        const calTag = `(Example min: ${calF01.min.toFixed(1)}%, p10–p90: ${calF01.p10.toFixed(1)}–${calF01.p90.toFixed(1)}%)`;
-        addFlag(
-          'F01',
-          sev,
-          w.start,
-          w.end,
-          `word "${w.word}" (${w.start.toFixed(2)}–${w.end.toFixed(2)}s) visible for ${w.visible_during_sung_pct.toFixed(1)}% of sung window ${calTag}`,
-          true
-        );
-      }
+  const threshF01 = calF01 ? calF01.min : CONFIG.lyric_min_visible_pct;
+  const isCalF01 = Boolean(calF01);
+  for (const w of textAnalysis.words) {
+    if (w.visible_during_sung_pct < threshF01) {
+      const sev: Severity = w.visible_during_sung_pct < 50.0 ? 'warn' : 'info';
+      const calTag = calF01
+        ? `(Example min: ${calF01.min.toFixed(1)}%, p10–p90: ${calF01.p10.toFixed(1)}–${calF01.p90.toFixed(1)}%)`
+        : `(default threshold: ${threshF01.toFixed(1)}%)`;
+      addFlag(
+        'F01',
+        sev,
+        w.start,
+        w.end,
+        `word "${w.word}" (${w.start.toFixed(2)}–${w.end.toFixed(2)}s) visible for ${w.visible_during_sung_pct.toFixed(1)}% of sung window ${calTag}`,
+        isCalF01
+      );
     }
   }
 
-  // F02: current sung word peaks below min of Example project
-  // Calibrated against Example project lyricPeakHPct distribution
+  // F02: current sung word peaks below min of Example project (or CONFIG default)
   const calF02 = (calibration?.lyricPeakHPct && calibration.lyricPeakHPct.n > 0) ? calibration.lyricPeakHPct : null;
-  const threshF02 = calF02 ? calF02.min : null;
-  if (threshF02 !== null) {
-    for (const w of textAnalysis.words) {
-      if (w.peak_hPct < threshF02) {
-        const calTag = `(Example min: ${calF02.min.toFixed(1)}%, p10–p90: ${calF02.p10.toFixed(1)}–${calF02.p90.toFixed(1)}%)`;
-        addFlag(
-          'F02',
-          'info',
-          w.start,
-          w.end,
-          `word "${w.word}" peaked at ${w.peak_hPct.toFixed(1)}% of frame height ${calTag}`,
-          true
-        );
-      }
+  const threshF02 = calF02 ? calF02.min : CONFIG.lyric_min_peak_h_pct;
+  const isCalF02 = Boolean(calF02);
+  for (const w of textAnalysis.words) {
+    if (w.peak_hPct < threshF02) {
+      const calTag = calF02
+        ? `(Example min: ${calF02.min.toFixed(1)}%, p10–p90: ${calF02.p10.toFixed(1)}–${calF02.p90.toFixed(1)}%)`
+        : `(default threshold: ${threshF02.toFixed(1)}%)`;
+      addFlag(
+        'F02',
+        'info',
+        w.start,
+        w.end,
+        `word "${w.word}" peaked at ${w.peak_hPct.toFixed(1)}% of frame height ${calTag}`,
+        isCalF02
+      );
     }
   }
 
-  // F03: word shows > max anticipation of Example project
-  // Calibrated against Example project lyricAnticipationS distribution
+  // F03: word shows > max anticipation of Example project (or CONFIG default)
   const calF03 = (calibration?.lyricAnticipationS && calibration.lyricAnticipationS.n > 0) ? calibration.lyricAnticipationS : null;
-  const threshF03 = calF03 ? calF03.max : null;
-  if (threshF03 !== null) {
-    for (const w of textAnalysis.words) {
-      if (w.appear_Δms !== null && w.first_visible !== null) {
-        const leadS = -w.appear_Δms / 1000;
-        if (leadS > threshF03) {
-          const calTag = `(Example max: ${calF03.max.toFixed(2)}s, p10–p90: ${calF03.p10.toFixed(2)}–${calF03.p90.toFixed(2)}s)`;
-          addFlag(
-            'F03',
-            'info',
-            w.first_visible,
-            w.start,
-            `word "${w.word}" appeared at ${w.first_visible.toFixed(2)}s, ${leadS.toFixed(2)}s before sung start at ${w.start.toFixed(2)}s ${calTag}`,
-            true
-          );
-        }
+  const threshF03 = calF03 ? calF03.max : CONFIG.lyric_max_anticipation_s;
+  const isCalF03 = Boolean(calF03);
+  for (const w of textAnalysis.words) {
+    if (w.appear_Δms !== null && w.first_visible !== null) {
+      const leadS = -w.appear_Δms / 1000;
+      if (leadS > threshF03) {
+        const calTag = calF03
+          ? `(Example max: ${calF03.max.toFixed(2)}s, p10–p90: ${calF03.p10.toFixed(2)}–${calF03.p90.toFixed(2)}s)`
+          : `(default threshold: ${threshF03.toFixed(2)}s)`;
+        addFlag(
+          'F03',
+          'info',
+          w.first_visible,
+          w.start,
+          `word "${w.word}" appeared at ${w.first_visible.toFixed(2)}s, ${leadS.toFixed(2)}s before sung start at ${w.start.toFixed(2)}s ${calTag}`,
+          isCalF03
+        );
       }
     }
   }
@@ -238,7 +242,7 @@ export function evaluateFlags(
   // -------------------------------------------------------------
 
   // F06: text inside a corner region (outer 12% × 14%) persisting > 3 s (uncalibrated proxy)
-  for (const r of textAnalysis.cornerRuns) {
+  for (const r of (textAnalysis.cornerRuns ?? [])) {
     addFlag(
       'F06',
       'info',
@@ -250,7 +254,7 @@ export function evaluateFlags(
   }
 
   // F07: a string containing digits that doesn't change for > 3 s in the same slot (uncalibrated proxy)
-  for (const s of textAnalysis.staticDigitRuns) {
+  for (const s of (textAnalysis.staticDigitRuns ?? [])) {
     addFlag(
       'F07',
       'info',
@@ -312,26 +316,27 @@ export function evaluateFlags(
   // TIER B (Calibrated): F09 (Audio hit response ratio)
   // -------------------------------------------------------------
 
-  // F09: strong kick (top quartile by strength) with response ratio < min of Example project
+  // F09: strong kick (top quartile by strength) with response ratio < p10 of Example project (or CONFIG default)
   const kicks = hits.filter((h) => h.type === 'kick');
   if (kicks.length > 0) {
     const calF09 = (calibration?.kickResponseRatioMedian && calibration.kickResponseRatioMedian.n > 0) ? calibration.kickResponseRatioMedian : null;
-    const threshF09 = calF09 ? calF09.min : null;
-    if (threshF09 !== null) {
-      const sortedStrengths = kicks.map((k) => k.strength).sort((a, b) => a - b);
-      const q75 = sortedStrengths[Math.floor(sortedStrengths.length * 0.75)] ?? 0;
-      for (const k of kicks) {
-        if (k.strength >= q75 && k.ratio < threshF09) {
-          const calTag = `(Example min: ${calF09.min.toFixed(2)}, p10–p90: ${calF09.p10.toFixed(2)}–${calF09.p90.toFixed(2)})`;
-          addFlag(
-            'F09',
-            'info',
-            k.t,
-            k.t + 0.15,
-            `kick at ${k.t.toFixed(2)}s (strength ${k.strength.toFixed(2)}) had response ratio ${k.ratio.toFixed(2)} ${calTag}`,
-            true
-          );
-        }
+    const threshF09 = calF09 ? calF09.p10 : CONFIG.kick_top_quartile_min_ratio;
+    const isCalF09 = Boolean(calF09);
+    const sortedStrengths = kicks.map((k) => k.strength).sort((a, b) => a - b);
+    const q75 = sortedStrengths[Math.floor(sortedStrengths.length * 0.75)] ?? 0;
+    for (const k of kicks) {
+      if (k.strength >= q75 && k.ratio < threshF09) {
+        const calTag = calF09
+          ? `(Example p10: ${calF09.p10.toFixed(2)}, min: ${calF09.min.toFixed(2)}, p50: ${calF09.p50.toFixed(2)})`
+          : `(default threshold: ${threshF09.toFixed(2)})`;
+        addFlag(
+          'F09',
+          'warn',
+          k.t,
+          k.t + 0.15,
+          `kick at ${k.t.toFixed(2)}s (strength ${k.strength.toFixed(2)}) had response ratio ${k.ratio.toFixed(2)} ${calTag}`,
+          isCalF09
+        );
       }
     }
   }
@@ -358,87 +363,91 @@ export function evaluateFlags(
   // TIER B (Calibrated): F11 (Bright non-signal bloom)
   // -------------------------------------------------------------
 
-  // F11: > max % of pixels are bright (luma > 0.85) and non-signal hue, outside flash frames
+  // F11: > p90 % of pixels are bright (luma > 0.85) and non-signal hue, outside flash frames
   const calF11 = (calibration?.brightNonsignalPct && calibration.brightNonsignalPct.n > 0) ? calibration.brightNonsignalPct : null;
-  const threshF11 = calF11 ? calF11.max : null;
-  if (threshF11 !== null) {
-    let bRunStart = -1, maxPctB = 0;
-    for (let i = 0; i < frames.length; i++) {
-      const f = frames[i]!;
-      const inFlash = isInFlashWindow(f.t);
-      if (!inFlash && f.bright_nonsignal_pct > threshF11) {
-        if (bRunStart < 0) { bRunStart = i; maxPctB = f.bright_nonsignal_pct; }
-        else maxPctB = Math.max(maxPctB, f.bright_nonsignal_pct);
-      } else {
-        if (bRunStart >= 0) {
-          const calTag = `(Example max: ${calF11.max.toFixed(2)}%, p10–p90: ${calF11.p10.toFixed(2)}–${calF11.p90.toFixed(2)}%)`;
-          addFlag(
-            'F11',
-            'warn',
-            frames[bRunStart]!.t,
-            frames[i - 1]!.t,
-            `${maxPctB.toFixed(2)}% bright non-signal pixels (luma > 0.85) ${calTag}`,
-            true
-          );
-          bRunStart = -1;
-        }
+  const threshF11 = calF11 ? calF11.p90 : CONFIG.bone_bloom_bright_nonsignal_pct;
+  const isCalF11 = Boolean(calF11);
+  let bRunStart = -1, maxPctB = 0;
+  for (let i = 0; i < frames.length; i++) {
+    const f = frames[i]!;
+    const inFlash = isInFlashWindow(f.t);
+    if (!inFlash && f.bright_nonsignal_pct > threshF11) {
+      if (bRunStart < 0) { bRunStart = i; maxPctB = f.bright_nonsignal_pct; }
+      else maxPctB = Math.max(maxPctB, f.bright_nonsignal_pct);
+    } else {
+      if (bRunStart >= 0) {
+        const calTag = calF11
+          ? `(Example p90: ${calF11.p90.toFixed(2)}%, max: ${calF11.max.toFixed(2)}%)`
+          : `(default threshold: ${threshF11.toFixed(2)}%)`;
+        addFlag(
+          'F11',
+          'warn',
+          frames[bRunStart]!.t,
+          frames[i - 1]!.t,
+          `${maxPctB.toFixed(2)}% bright non-signal pixels (luma > 0.85) ${calTag}`,
+          isCalF11
+        );
+        bRunStart = -1;
       }
     }
-    if (bRunStart >= 0) {
-      const calTag = calF11
-        ? `(Example max: ${calF11.max.toFixed(2)}%, p10–p90: ${calF11.p10.toFixed(2)}–${calF11.p90.toFixed(2)}%)`
-        : `(> ${CONFIG.bone_bloom_bright_nonsignal_pct.toFixed(2)}%)`;
-      addFlag(
-        'F11',
-        'warn',
-        frames[bRunStart]!.t,
-        frames[frames.length - 1]!.t,
-        `${maxPctB.toFixed(2)}% bright non-signal pixels (luma > 0.85) ${calTag}`,
-        Boolean(calF11)
-      );
-    }
+  }
+  if (bRunStart >= 0) {
+    const calTag = calF11
+      ? `(Example p90: ${calF11.p90.toFixed(2)}%, max: ${calF11.max.toFixed(2)}%)`
+      : `(default threshold: ${threshF11.toFixed(2)}%)`;
+    addFlag(
+      'F11',
+      'warn',
+      frames[bRunStart]!.t,
+      frames[frames.length - 1]!.t,
+      `${maxPctB.toFixed(2)}% bright non-signal pixels (luma > 0.85) ${calTag}`,
+      isCalF11
+    );
   }
 
   // -------------------------------------------------------------
   // TIER B (Calibrated): F12 (Off-palette wash)
   // -------------------------------------------------------------
 
-  // F12: > max % of pixels are further than ΔE 12 from every palette entry
+  // F12: > p90 % of pixels are further than ΔE 12 from every palette entry
   const calF12 = (calibration?.otherPct && calibration.otherPct.n > 0) ? calibration.otherPct : null;
-  const threshF12 = calF12 ? calF12.max : null;
-  if (threshF12 !== null) {
-    let oRunStart = -1, maxPctO = 0;
-    for (let i = 0; i < frames.length; i++) {
-      const f = frames[i]!;
-      if (f.other_pct > threshF12) {
-        if (oRunStart < 0) { oRunStart = i; maxPctO = f.other_pct; }
-        else maxPctO = Math.max(maxPctO, f.other_pct);
-      } else {
-        if (oRunStart >= 0) {
-          const calTag = `(Example max: ${calF12.max.toFixed(2)}%, p10–p90: ${calF12.p10.toFixed(2)}–${calF12.p90.toFixed(2)}%)`;
-          addFlag(
-            'F12',
-            'warn',
-            frames[oRunStart]!.t,
-            frames[i - 1]!.t,
-            `${maxPctO.toFixed(2)}% off-palette pixels (ΔE > 12.0) ${calTag}`,
-            true
-          );
-          oRunStart = -1;
-        }
+  const threshF12 = calF12 ? calF12.p90 : CONFIG.palette_off_max_pct;
+  const isCalF12 = Boolean(calF12);
+  let oRunStart = -1, maxPctO = 0;
+  for (let i = 0; i < frames.length; i++) {
+    const f = frames[i]!;
+    if (f.other_pct > threshF12) {
+      if (oRunStart < 0) { oRunStart = i; maxPctO = f.other_pct; }
+      else maxPctO = Math.max(maxPctO, f.other_pct);
+    } else {
+      if (oRunStart >= 0) {
+        const calTag = calF12
+          ? `(Example p90: ${calF12.p90.toFixed(2)}%, max: ${calF12.max.toFixed(2)}%)`
+          : `(default threshold: ${threshF12.toFixed(2)}%)`;
+        addFlag(
+          'F12',
+          'warn',
+          frames[oRunStart]!.t,
+          frames[i - 1]!.t,
+          `${maxPctO.toFixed(2)}% off-palette pixels (ΔE > 12.0) ${calTag}`,
+          isCalF12
+        );
+        oRunStart = -1;
       }
     }
-    if (oRunStart >= 0) {
-      const calTag = `(Example max: ${calF12.max.toFixed(2)}%, p10–p90: ${calF12.p10.toFixed(2)}–${calF12.p90.toFixed(2)}%)`;
-      addFlag(
-        'F12',
-        'warn',
-        frames[oRunStart]!.t,
-        frames[frames.length - 1]!.t,
-        `${maxPctO.toFixed(2)}% off-palette pixels (ΔE > 12.0) ${calTag}`,
-        true
-      );
-    }
+  }
+  if (oRunStart >= 0) {
+    const calTag = calF12
+      ? `(Example p90: ${calF12.p90.toFixed(2)}%, max: ${calF12.max.toFixed(2)}%)`
+      : `(default threshold: ${threshF12.toFixed(2)}%)`;
+    addFlag(
+      'F12',
+      'warn',
+      frames[oRunStart]!.t,
+      frames[frames.length - 1]!.t,
+      `${maxPctO.toFixed(2)}% off-palette pixels (ΔE > 12.0) ${calTag}`,
+      isCalF12
+    );
   }
 
   // -------------------------------------------------------------
@@ -481,81 +490,84 @@ export function evaluateFlags(
   // TIER B (Calibrated): F14 (Adaptive sampler saturation)
   // -------------------------------------------------------------
 
-  // F14: adaptive sampler reached max spp of Example project
+  // F14: adaptive sampler reached max spp of Example project (or CONFIG default)
   const calF14 = (calibration?.samplerMaxSpp && calibration.samplerMaxSpp.n > 0) ? calibration.samplerMaxSpp : null;
-  const threshF14 = calF14 ? calF14.max : null;
-  if (threshF14 !== null) {
-    let sppStart = -1;
-    for (let i = 0; i < frames.length; i++) {
-      const f = frames[i]!;
-      if (f.spp > threshF14) {
-        if (sppStart < 0) sppStart = i;
-      } else {
-        if (sppStart >= 0) {
-          addFlag(
-            'F14',
-            'warn',
-            frames[sppStart]!.t,
-            frames[i - 1]!.t,
-            `adaptive sampler reached ${f.spp} sub-frames (sampling saturation > ${threshF14})`,
-            true
-          );
-          sppStart = -1;
-        }
+  const threshF14 = calF14 ? calF14.max : CONFIG.sampler_max_spp;
+  const isCalF14 = Boolean(calF14);
+  let sppStart = -1, maxRunSpp = 0;
+  for (let i = 0; i < frames.length; i++) {
+    const f = frames[i]!;
+    if (f.spp >= threshF14) {
+      if (sppStart < 0) { sppStart = i; maxRunSpp = f.spp; }
+      else maxRunSpp = Math.max(maxRunSpp, f.spp);
+    } else {
+      if (sppStart >= 0) {
+        addFlag(
+          'F14',
+          'warn',
+          frames[sppStart]!.t,
+          frames[i - 1]!.t,
+          `adaptive sampler reached ${maxRunSpp} sub-frames (sampling saturation >= ${threshF14})`,
+          isCalF14
+        );
+        sppStart = -1;
       }
     }
-    if (sppStart >= 0) {
-      addFlag(
-        'F14',
-        'warn',
-        frames[sppStart]!.t,
-        frames[frames.length - 1]!.t,
-        `adaptive sampler reached ${CONFIG.sampler_max_spp} sub-frames (sampling saturation > ${threshF14})`,
-        true
-      );
-    }
+  }
+  if (sppStart >= 0) {
+    addFlag(
+      'F14',
+      'warn',
+      frames[sppStart]!.t,
+      frames[frames.length - 1]!.t,
+      `adaptive sampler reached ${maxRunSpp} sub-frames (sampling saturation >= ${threshF14})`,
+      isCalF14
+    );
   }
 
   // -------------------------------------------------------------
   // TIER B (Calibrated): F15 (Shimmer index flicker)
   // -------------------------------------------------------------
 
-  // F15: shimmer index above max of Example project
+  // F15: shimmer index above p90 of Example project (or CONFIG default)
   const calF15 = (calibration?.shimmer && calibration.shimmer.n > 0) ? calibration.shimmer : null;
-  const threshF15 = calF15 ? calF15.max : null;
-  if (threshF15 !== null) {
-    let shimStart = -1, maxShim = 0;
-    for (let i = 0; i < frames.length; i++) {
-      const f = frames[i]!;
-      if (f.shimmer > threshF15) {
-        if (shimStart < 0) { shimStart = i; maxShim = f.shimmer; }
-        else maxShim = Math.max(maxShim, f.shimmer);
-      } else {
-        if (shimStart >= 0) {
-          const calTag = `(Example max: ${calF15.max.toFixed(4)}, p10–p90: ${calF15.p10.toFixed(4)}–${calF15.p90.toFixed(4)})`;
-          addFlag(
-            'F15',
-            'warn',
-            frames[shimStart]!.t,
-            frames[i - 1]!.t,
-            `shimmer index ${maxShim.toFixed(4)} exceeded threshold ${calTag}`,
-            true
-          );
-          shimStart = -1;
-        }
+  const threshF15 = calF15 ? calF15.p90 : CONFIG.shimmer_threshold;
+  const isCalF15 = Boolean(calF15);
+  let shimStart = -1, maxShim = 0;
+  for (let i = 0; i < frames.length; i++) {
+    const f = frames[i]!;
+    if (f.shimmer > threshF15) {
+      if (shimStart < 0) { shimStart = i; maxShim = f.shimmer; }
+      else maxShim = Math.max(maxShim, f.shimmer);
+    } else {
+      if (shimStart >= 0) {
+        const calTag = calF15
+          ? `(Example p90: ${calF15.p90.toFixed(4)}, max: ${calF15.max.toFixed(4)})`
+          : `(default threshold: ${threshF15.toFixed(4)})`;
+        addFlag(
+          'F15',
+          'warn',
+          frames[shimStart]!.t,
+          frames[i - 1]!.t,
+          `shimmer index ${maxShim.toFixed(4)} exceeded threshold ${calTag}`,
+          isCalF15
+        );
+        shimStart = -1;
       }
     }
-    if (shimStart >= 0) {
-      const calTag = `(Example max: ${calF15.max.toFixed(4)}, p10–p90: ${calF15.p10.toFixed(4)}–${calF15.p90.toFixed(4)})`;
-      addFlag(
-        'F15',
-        'warn',
-        frames[shimStart]!.t,
-        frames[frames.length - 1]!.t,
-        `shimmer index ${maxShim.toFixed(4)} exceeded threshold ${calTag}`,
-        true
-      );
-    }
+  }
+  if (shimStart >= 0) {
+    const calTag = calF15
+      ? `(Example p90: ${calF15.p90.toFixed(4)}, max: ${calF15.max.toFixed(4)})`
+      : `(default threshold: ${threshF15.toFixed(4)})`;
+    addFlag(
+      'F15',
+      'warn',
+      frames[shimStart]!.t,
+      frames[frames.length - 1]!.t,
+      `shimmer index ${maxShim.toFixed(4)} exceeded threshold ${calTag}`,
+      isCalF15
+    );
   }
 
   // -------------------------------------------------------------

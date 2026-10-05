@@ -274,8 +274,8 @@ export class SDFBatch {
   /**
    * Draw an analytic rounded rectangle with optional stroke and glow
    */
-  rect(x: number, y: number, w: number, h: number, opts: SDFRectOpts = {}): void {
-    if (this.count >= this.capacity) return;
+  rect(x: number, y: number, w: number, h: number, opts: SDFRectOpts = {}): this {
+    if (this.count >= this.capacity) return this;
     const idx = this.count++;
     const glow = opts.glow ?? 1.0;
 
@@ -319,13 +319,14 @@ export class SDFBatch {
     this.strokeArr[idx * 4 + 1] = stroke[1] * glow;
     this.strokeArr[idx * 4 + 2] = stroke[2] * glow;
     this.strokeArr[idx * 4 + 3] = stroke[3];
+    return this;
   }
 
   /**
    * Draw an analytic soft drop shadow for a card or panel
    */
-  shadow(x: number, y: number, w: number, h: number, blur = 16, color: [number, number, number, number] = [0, 0, 0, 0.4], offset: [number, number] = [0, 6], radius = 8): void {
-    if (this.count >= this.capacity) return;
+  shadow(x: number, y: number, w: number, h: number, blur = 16, color: [number, number, number, number] = [0, 0, 0, 0.4], offset: [number, number] = [0, 6], radius = 8): this {
+    if (this.count >= this.capacity) return this;
     const idx = this.count++;
 
     // Bounds
@@ -356,13 +357,14 @@ export class SDFBatch {
     this.strokeArr[idx * 4 + 1] = 0;
     this.strokeArr[idx * 4 + 2] = 0;
     this.strokeArr[idx * 4 + 3] = 0;
+    return this;
   }
 
   /**
    * Draw an analytic ring or trimmed circular gauge
    */
-  ring(cx: number, cy: number, radius: number, thickness: number, trim: [number, number] = [0, 1], color: [number, number, number, number] = [1, 1, 1, 1], glow = 1.0): void {
-    if (this.count >= this.capacity) return;
+  ring(cx: number, cy: number, radius: number, thickness: number, trim: [number, number] = [0, 1], color: [number, number, number, number] = [1, 1, 1, 1], glow = 1.0): this {
+    if (this.count >= this.capacity) return this;
     const idx = this.count++;
 
     const d = radius * 2;
@@ -391,13 +393,14 @@ export class SDFBatch {
     this.strokeArr[idx * 4 + 1] = color[1] * glow;
     this.strokeArr[idx * 4 + 2] = color[2] * glow;
     this.strokeArr[idx * 4 + 3] = color[3];
+    return this;
   }
 
   /**
    * Draw an analytic solid circle
    */
-  circle(cx: number, cy: number, radius: number, color: [number, number, number, number] = [1, 1, 1, 1], glow = 1.0): void {
-    if (this.count >= this.capacity) return;
+  circle(cx: number, cy: number, radius: number, color: [number, number, number, number] = [1, 1, 1, 1], glow = 1.0): this {
+    if (this.count >= this.capacity) return this;
     const idx = this.count++;
 
     const d = radius * 2;
@@ -426,13 +429,14 @@ export class SDFBatch {
     this.strokeArr[idx * 4 + 1] = 0;
     this.strokeArr[idx * 4 + 2] = 0;
     this.strokeArr[idx * 4 + 3] = 0;
+    return this;
   }
 
   /**
    * Draw an analytic HUD reticle / crosshair target
    */
-  reticle(cx: number, cy: number, radius: number, thickness = 1.5, color: [number, number, number, number] = [1, 1, 1, 1], glow = 1.0): void {
-    if (this.count >= this.capacity) return;
+  reticle(cx: number, cy: number, radius: number, thickness = 1.5, color: [number, number, number, number] = [1, 1, 1, 1], glow = 1.0): this {
+    if (this.count >= this.capacity) return this;
     const idx = this.count++;
 
     const d = radius * 2.8;
@@ -461,6 +465,7 @@ export class SDFBatch {
     this.strokeArr[idx * 4 + 1] = color[1] * glow;
     this.strokeArr[idx * 4 + 2] = color[2] * glow;
     this.strokeArr[idx * 4 + 3] = color[3];
+    return this;
   }
 
   /**

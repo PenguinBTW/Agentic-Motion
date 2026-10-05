@@ -117,9 +117,15 @@ export function camFromKey(k: Key, hit = 0, t = 0, cx = W / 2, cy = H / 2): Cam 
     roll += noise1(t * 29, 13) * 0.012 * hit;
   }
   const Fw = vnorm(vsub(k.tg, p));
-  // World up is (0, 1, 0). Right vector = worldUp x Fw so that for Fw=[0,0,1], R0=[1,0,0]
-  const R0 = vnorm(vcross([0, 1, 0], Fw));
-  const U0 = vcross(Fw, R0);
+  // Singular-safe reference up fallback when looking straight up or down (|Fw.y| > 0.99)
+  let upRef: V3 = [0, 1, 0];
+  if (Math.abs(Fw[1]) > 0.99) {
+    upRef = [0, 0, Fw[1] > 0 ? -1 : 1];
+  }
+  // Camera backward vector in world space: B = -Fw; basis maintaining det = +1
+  const B: V3 = [-Fw[0], -Fw[1], -Fw[2]];
+  const R0 = vnorm(vcross(upRef, B));
+  const U0 = vcross(B, R0);
   const c = Math.cos(roll), s = Math.sin(roll);
   return {
     p,

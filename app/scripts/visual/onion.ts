@@ -16,17 +16,21 @@ export interface OnionOptions {
   out?: string;
 }
 
+function isFlagVal(val?: string): boolean {
+  return typeof val === 'string' && !val.startsWith('--');
+}
+
 export function parseOnionArgs(argv: string[]): OnionOptions {
   const opts: OnionOptions = {};
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
-    if (arg === '--t' && argv[i + 1]) opts.t = parseFloat(argv[++i]!);
-    else if (arg === '--from' && argv[i + 1]) opts.from = parseFloat(argv[++i]!);
-    else if (arg === '--to' && argv[i + 1]) opts.to = parseFloat(argv[++i]!);
-    else if (arg === '--window' && argv[i + 1]) opts.window = parseFloat(argv[++i]!);
-    else if (arg === '--frames' && argv[i + 1]) opts.frames = parseInt(argv[++i]!, 10);
-    else if (arg === '--scene' && argv[i + 1]) opts.scene = argv[++i]!;
-    else if (arg === '--out' && argv[i + 1]) opts.out = argv[++i]!;
+    if (arg === '--t' && isFlagVal(argv[i + 1])) { const v = parseFloat(argv[++i]!); if (Number.isFinite(v)) opts.t = v; }
+    else if (arg === '--from' && isFlagVal(argv[i + 1])) { const v = parseFloat(argv[++i]!); if (Number.isFinite(v)) opts.from = v; }
+    else if (arg === '--to' && isFlagVal(argv[i + 1])) { const v = parseFloat(argv[++i]!); if (Number.isFinite(v)) opts.to = v; }
+    else if (arg === '--window' && isFlagVal(argv[i + 1])) { const v = parseFloat(argv[++i]!); if (Number.isFinite(v)) opts.window = v; }
+    else if (arg === '--frames' && isFlagVal(argv[i + 1])) { const v = parseInt(argv[++i]!, 10); if (Number.isFinite(v)) opts.frames = Math.max(2, Math.min(64, v)); }
+    else if (arg === '--scene' && isFlagVal(argv[i + 1])) { opts.scene = argv[++i]!; }
+    else if (arg === '--out' && isFlagVal(argv[i + 1])) { opts.out = argv[++i]!; }
   }
   return opts;
 }
@@ -34,13 +38,27 @@ export function parseOnionArgs(argv: string[]): OnionOptions {
 export async function runOnion(page: Page, argv: string[] = []): Promise<void> {
   const opts = parseOnionArgs(argv);
 
-  let from: number;
-  let to: number;
+  if (opts.from === undefined && opts.to === undefined && opts.scene) {
+    const tl: { id: string; start: number; end: number }[] = await page.evaluate(
+      () => (window as any).__pdoom?.timeline || []
+    );
+    const match = tl.find((e) => e.id === opts.scene);
+    if (match) {
+      opts.from = match.start;
+      opts.to = match.end;
+    }
+  }
+
+  let from = opts.from;
+  let to = opts.to;
   const numFrames = opts.frames ?? 10;
 
-  if (opts.from !== undefined && opts.to !== undefined) {
-    from = opts.from;
-    to = opts.to;
+  if (from !== undefined && to !== undefined) {
+    // Both explicitly set
+  } else if (from !== undefined && to === undefined) {
+    to = from + (opts.window ?? 0.5);
+  } else if (to !== undefined && from === undefined) {
+    from = Math.max(0, to - (opts.window ?? 0.5));
   } else {
     const centerT = opts.t ?? 10.0;
     const halfWin = (opts.window ?? 0.5) / 2;
@@ -48,7 +66,9 @@ export async function runOnion(page: Page, argv: string[] = []): Promise<void> {
     to = centerT + halfWin;
   }
 
-  const outDir = path.resolve(opts.out ?? path.join(process.cwd(), '../out/visual/onion'));
+  const ROOT = path.resolve(import.meta.dir, '../../..');
+  const defaultOut = path.join(ROOT, 'out/visual/onion');
+  const outDir = path.resolve(opts.out ?? defaultOut);
   mkdirSync(outDir, { recursive: true });
 
   console.log(`[onion] Generating multi-exposure motion trail across [${from.toFixed(2)}–${to.toFixed(2)}s] (${numFrames} frames)...`);
@@ -212,9 +232,13 @@ export async function runOnion(page: Page, argv: string[] = []): Promise<void> {
       return {
         dataUrl,
         summary: {
+          scene: opts.scene ?? 'all',
+          center_t: times[midIdx],
+          window_seconds: times[N - 1]! - times[0]!,
           from: times[0],
           to: times[N - 1],
-          center_t: times[midIdx],
+          frame_count: N,
+          timestamps: times,
           frames: N,
           total_centroid_travel_px: totalTravel,
           inter_frame_spacings_px: spacings,
@@ -222,7 +246,7 @@ export async function runOnion(page: Page, argv: string[] = []): Promise<void> {
         },
       };
     },
-    { times: timestamps }
+    { times: timestamps, sceneName: opts.scene ?? 'all' }
   );
 
   const base64Data = result.dataUrl.replace(/^data:image\/png;base64,/, '');

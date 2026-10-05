@@ -8,6 +8,11 @@
 //            --gpu enables AMD AMF hardware video encoding (h264_amf, hevc_amf, av1_amf), offloading CPU load;
 //            --samples N averages N sub-frames per frame over shutter×(1/fps): motion blur + temporal AA;
 //            --samples auto picks the count per frame (4, 12, 36, 108 or 324, see Engine.render)
+//   motion:  bun scripts/render.ts motion [--from 0] [--to 30] [--samples 1] [--shutter 0.5] [--calibrate]
+//   onion:   bun scripts/render.ts onion --scene demo --from 1.0 --to 2.0 [--frames 10]
+//   godview: bun scripts/render.ts godview --scene demo [--corridor]
+//   stitch:  bun scripts/render.ts stitch --from-scene sceneA --to-scene sceneB [--window 300]
+//   compare: bun scripts/render.ts compare --active-scene demo --ref-scene loss
 //   --scale N (all modes): render at N× the 1920x1080 layout (--scale 2 = true 3840x2160); stills are then saved
 //            full-res from the pixel buffer, videos are encoded at the physical size.
 // Uses the Vite dev server at --url (default http://localhost:5173); starts a private one if unreachable.
@@ -72,11 +77,19 @@ async function ensureServer(): Promise<{ url: string; stop: () => void }> {
 }
 
 async function openPage(url: string) {
-  const browser = await chromium.launch({
-    channel: 'chrome',
+  const launchOpts = {
     headless: !flag('headed'),
     args: ['--use-angle=vulkan', '--enable-gpu-rasterization', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'],
-  })
+  };
+  let browser;
+  try {
+    browser = await chromium.launch({
+      ...launchOpts,
+      channel: 'chrome',
+    });
+  } catch {
+    browser = await chromium.launch(launchOpts);
+  }
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
   const logs: string[] = [];
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') logs.push(`[${m.type()}] ${m.text()}`); });
@@ -129,7 +142,8 @@ async function stills(page: Page, times: number[], outDir: string) {
 }
 
 async function sheet(page: Page, times: number[], cols: number, out: string) {
-  const dataUrl: string = await page.evaluate(async ({ times, cols }) => {
+  const shutter = +opt('shutter', '0.5')!;
+  const dataUrl: string = await page.evaluate(async ({ times, cols, samples, shutter }: any) => {
     const P = (window as any).__pdoom;
     const cw = 480, ch = 270, pad = 4, lab = 18;
     const rows = Math.ceil(times.length / cols);
@@ -138,14 +152,15 @@ async function sheet(page: Page, times: number[], cols: number, out: string) {
     const c = cv.getContext('2d')!;
     c.fillStyle = '#222'; c.fillRect(0, 0, cv.width, cv.height);
     const src = document.getElementById('c') as HTMLCanvasElement;
-    times.forEach((t: number, i: number) => {
-      P.still(t);
+    for (let i = 0; i < times.length; i++) {
+      const t = times[i];
+      await P.still(t, samples, shutter);
       const x = pad + (i % cols) * (cw + pad), y = pad + Math.floor(i / cols) * (ch + lab + pad);
       c.drawImage(src, x, y + lab, cw, ch);
       c.fillStyle = '#ddd'; c.font = '13px monospace'; c.fillText(`${t.toFixed(2)}s`, x + 2, y + 13);
-    });
+    }
     return cv.toDataURL('image/png');
-  }, { times, cols });
+  }, { times, cols, samples: SAMPLES, shutter });
   const outDir = path.dirname(path.resolve(out));
   if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
   await Bun.write(out, Buffer.from(dataUrl.split(',')[1]!, 'base64'));
@@ -369,14 +384,15 @@ async function motion(page: Page) {
     const { edgeDensity, edgeMap } = computeSobelEdges(luma, 480, 270);
     edgeMaps.push(edgeMap);
 
-    let E = 0, E_p95 = 0, flow_dx = 0, flow_dy = 0;
+    let E = 0, E_p95 = 0, flow_dx = 0, flow_dy = 0, flow_invalid = false;
     if (i > 0) {
       const eRes = computeMotionEnergy(luma, lumas[i - 1]!);
       E = eRes.E;
       E_p95 = eRes.E_p95;
-      const flow = computePhaseCorrelationFlow(luma, lumas[i - 1]!, fps, 480, 270);
+      const flow = computePhaseCorrelationFlow(luma, lumas[i - 1]!, fps, 480, 270, contrast);
       flow_dx = flow.flow_dx;
       flow_dy = flow.flow_dy;
+      flow_invalid = flow.invalid ?? false;
     }
 
     const { signalPct, brightNonsignalPct } = computeSignalMetrics(fBuf, 480, 270);
@@ -390,6 +406,7 @@ async function motion(page: Page) {
       E_p95,
       flow_dx,
       flow_dy,
+      flow_invalid,
       luma: lumaMean,
       contrast,
       edge_density: edgeDensity,
@@ -410,7 +427,7 @@ async function motion(page: Page) {
   }
 
   console.log('[motion] Analyzing text probe & lyric join...');
-  const textAnalysis = analyzeTextProbes(textProbes, lyricsData, from, to);
+  const textAnalysis = analyzeTextProbes(textProbes, lyricsData, from, to, fps);
 
   for (const f of frameMetrics) {
     const fTexts = textProbes.filter((r) => r.frameIdx === f.n);
@@ -508,8 +525,10 @@ async function motion(page: Page) {
     let E_peak = 0, peakT = hit.t, maxShake = 0, peakLuma = 0;
     for (const pf of peakFrames) {
       if (pf.E > E_peak) { E_peak = pf.E; peakT = pf.t; peakLuma = pf.luma; }
-      const shake = Math.hypot(pf.flow_dx, pf.flow_dy) / fps;
-      if (shake > maxShake) maxShake = shake;
+      if (!pf.flow_invalid) {
+        const shake = Math.hypot(pf.flow_dx, pf.flow_dy) / fps;
+        if (shake > maxShake) maxShake = shake;
+      }
     }
 
     const ratio = E_peak / Math.max(E_base, CONFIG.eps_energy);
@@ -530,8 +549,33 @@ async function motion(page: Page) {
     });
   }
 
+  // Parse CLI waivers (--waive <rule>:<reason>) and preserve prior waivers from findings.json
+  const waivers: Record<string, string> = {};
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--waive' && argv[i + 1] && !argv[i + 1].startsWith('--')) {
+      const parts = argv[++i]!.split(':');
+      const ruleKey = parts[0]!.trim();
+      const reason = parts.slice(1).join(':').trim() || 'Waived by operator';
+      waivers[ruleKey] = reason;
+    }
+  }
+
+  const priorFindingsPath = path.join(outDir, 'findings.json');
+  if (existsSync(priorFindingsPath)) {
+    try {
+      const priorFindings = JSON.parse(await Bun.file(priorFindingsPath).text());
+      if (Array.isArray(priorFindings)) {
+        for (const pf of priorFindings) {
+          if (pf.waived && pf.waiverReason && pf.id) {
+            waivers[pf.id] = waivers[pf.id] ?? pf.waiverReason;
+          }
+        }
+      }
+    } catch {}
+  }
+
   console.log('[motion] Evaluating rule-based flags (F01–F16)...');
-  const flags = evaluateFlags(frameMetrics, textAnalysis, cutsList, hitsList, allowBlankRanges, allEvents, calibrationData);
+  const flags = evaluateFlags(frameMetrics, textAnalysis, cutsList, hitsList, allowBlankRanges, allEvents, calibrationData, waivers);
 
   console.log('[motion] Rendering diagnostic images...');
   const evidenceFiles: { name: string; content: string; whenToOpen: string }[] = [];

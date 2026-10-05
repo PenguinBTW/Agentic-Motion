@@ -1,7 +1,7 @@
 // Small math / animation helpers shared by every scene. Everything must be a
 // pure function of time (or seeded), so frames render identically on export.
 
-export const clamp = (x: number, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
+export const clamp = (x: number, a = 0, b = 1) => (Number.isNaN(x) ? a : x < a ? a : x > b ? b : x);
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 export const invLerp = (a: number, b: number, x: number) => (a === b ? 0 : (x - a) / (b - a));
 export const remap = (x: number, a: number, b: number, c: number, d: number, clampIt = true) => {
@@ -9,10 +9,12 @@ export const remap = (x: number, a: number, b: number, c: number, d: number, cla
   return lerp(c, d, clampIt ? clamp(t) : t);
 };
 export const smoothstep = (a: number, b: number, x: number) => {
+  if (a === b) return x >= b ? 1 : 0;
   const t = clamp((x - a) / (b - a));
   return t * t * (3 - 2 * t);
 };
 export const smootherstep = (a: number, b: number, x: number) => {
+  if (a === b) return x >= b ? 1 : 0;
   const t = clamp((x - a) / (b - a));
   return t * t * t * (t * (t * 6 - 15) + 10);
 };
@@ -49,13 +51,16 @@ export const ease = {
 
 /** Clamped eased progress of x through [a, b]. */
 export const prog = (x: number, a: number, b: number, fn: (t: number) => number = ease.linear) =>
-  fn(clamp((x - a) / (b - a)));
+  (a === b ? (x >= b ? 1 : 0) : fn(clamp((x - a) / (b - a))));
 
 /** Damped spring response to a step at time 0 (value goes 0 -> 1 with overshoot). */
 export const springStep = (t: number, freq = 4, damping = 0.35) => {
   if (t <= 0) return 0;
   const w = TAU * freq;
-  return 1 - Math.exp(-damping * w * t) * Math.cos(w * Math.sqrt(1 - damping * damping) * t);
+  if (damping >= 1) {
+    return 1 - Math.exp(-w * t) * (1 + w * t);
+  }
+  return 1 - Math.exp(-damping * w * t) * Math.cos(w * Math.sqrt(Math.max(0, 1 - damping * damping)) * t);
 };
 
 /** Exponential decay pulse after an event at time `t0` (1 at t0, fades with half-life `hl`). */

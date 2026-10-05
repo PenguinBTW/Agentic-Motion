@@ -109,6 +109,7 @@ function installTextProbeHook() {
   };
 }
 installTextProbeHook();
+if (typeof window !== 'undefined') (window as any).__textHookActive = true;
 
 // ------------------------------------------------------------------ export API
 function setupExport() {

@@ -14,15 +14,19 @@ export interface StitchOptions {
   out?: string;
 }
 
+function isFlagVal(val?: string): boolean {
+  return typeof val === 'string' && !val.startsWith('--');
+}
+
 export function parseStitchArgs(argv: string[]): StitchOptions {
   const opts: StitchOptions = {};
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
-    if (arg === '--t' && argv[i + 1]) opts.t = parseFloat(argv[++i]!);
-    else if (arg === '--window' && argv[i + 1]) opts.window = parseFloat(argv[++i]!);
-    else if (arg === '--from-scene' && argv[i + 1]) opts.fromScene = argv[++i]!;
-    else if (arg === '--to-scene' && argv[i + 1]) opts.toScene = argv[++i]!;
-    else if (arg === '--out' && argv[i + 1]) opts.out = argv[++i]!;
+    if (arg === '--t' && isFlagVal(argv[i + 1])) { const v = parseFloat(argv[++i]!); if (Number.isFinite(v)) opts.t = v; }
+    else if (arg === '--window' && isFlagVal(argv[i + 1])) { const v = parseFloat(argv[++i]!); if (Number.isFinite(v)) opts.window = v; }
+    else if (arg === '--from-scene' && isFlagVal(argv[i + 1])) { opts.fromScene = argv[++i]!; }
+    else if (arg === '--to-scene' && isFlagVal(argv[i + 1])) { opts.toScene = argv[++i]!; }
+    else if (arg === '--out' && isFlagVal(argv[i + 1])) { opts.out = argv[++i]!; }
   }
   return opts;
 }
@@ -34,22 +38,29 @@ export async function runStitch(page: Page, argv: string[] = []): Promise<void> 
   let cutT = opts.t;
   if (cutT === undefined) {
     const tl: { id: string; start: number; end: number }[] = await page.evaluate(
-      () => (window as any).__pdoom.timeline || []
+      () => (window as any).__pdoom?.timeline || []
     );
     if (opts.toScene && tl.length > 0) {
       const match = tl.find((e) => e.id === opts.toScene);
       if (match) cutT = match.start;
+    } else if (opts.fromScene && tl.length > 0) {
+      const match = tl.find((e) => e.id === opts.fromScene);
+      if (match) cutT = match.end;
     }
     if (cutT === undefined) cutT = 25.60; // fallback default
   }
 
-  const outDir = path.resolve(opts.out ?? path.join(process.cwd(), '../out/visual/stitch'));
+  const ROOT = path.resolve(import.meta.dir, '../../..');
+  const defaultOut = path.join(ROOT, 'out/visual/stitch');
+  const outDir = path.resolve(opts.out ?? defaultOut);
   mkdirSync(outDir, { recursive: true });
 
   console.log(`[stitch] Inspecting transition seam at t = ${cutT.toFixed(2)}s (from: ${opts.fromScene ?? 'auto'} -> to: ${opts.toScene ?? 'auto'})...`);
 
   const fps = 60;
-  const dt = 1 / fps;
+  // If window is provided in seconds (e.g. 0.25) or ms, derive frame spacing
+  const winS = opts.window ? (opts.window > 5 ? opts.window / 1000 : opts.window) : (10 / fps);
+  const dt = winS / 10;
   const tBefore = cutT - dt;
   const tAfter = cutT;
 
@@ -153,7 +164,7 @@ export async function runStitch(page: Page, argv: string[] = []): Promise<void> 
         // Frame label
         sCtx.font = '11px monospace';
         sCtx.fillStyle = i < 5 ? '#00FF66' : '#FF00AA';
-        sCtx.fillText(`t=${t.toFixed(2)}s (N${i < 5 ? i - 5 : '+' + (i - 4)})`, x + 6, 180 + 22);
+        sCtx.fillText(`t=${t.toFixed(2)}s (N${i === 5 ? '' : i < 5 ? (i - 5) : '+' + (i - 5)})`, x + 6, 180 + 22);
 
         // Cut line between frame 4 and 5
         if (i === 4) {
@@ -170,6 +181,12 @@ export async function runStitch(page: Page, argv: string[] = []): Promise<void> 
         onionUrl: onionCv.toDataURL('image/png'),
         stripUrl: sCv.toDataURL('image/png'),
         summary: {
+          cut_timestamp: tB,
+          from_scene: fromSceneName,
+          to_scene: toSceneName,
+          window_ms: (stripTimes[stripTimes.length - 1]! - stripTimes[0]!) * 1000,
+          sample_frames: stripTimes.length,
+          artifacts: ['onion_seam.png', 'strip_seam.png'],
           cut_t: tB,
           exit_t: tA,
           entry_t: tB,
@@ -178,7 +195,7 @@ export async function runStitch(page: Page, argv: string[] = []): Promise<void> 
         },
       };
     },
-    { tA: tBefore, tB: tAfter, stripTimes }
+    { tA: tBefore, tB: tAfter, stripTimes, fromSceneName: opts.fromScene ?? 'auto', toSceneName: opts.toScene ?? 'auto' }
   );
 
   const onionBase64 = result.onionUrl.replace(/^data:image\/png;base64,/, '');

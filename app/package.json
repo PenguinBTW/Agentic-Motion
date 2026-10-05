@@ -1,8 +1,15 @@
 {
   "name": "app",
+  "version": "0.5.0",
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "bun scripts/test_milestones.ts"
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/opentype.js": "^1.3.10",

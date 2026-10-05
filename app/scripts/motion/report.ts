@@ -1,8 +1,8 @@
 // Report generation: report.md, findings.json, summary.json, frames.csv, text.csv, events.json
 // Generates fact-only visual telemetry, 3-tier findings, and calibrated benchmark comparisons.
 import path from 'node:path';
-import type { FrameMetrics, FlagItem, TextProbeRecord, TextRun, AudioEvent, FindingItem, CalibrationData } from './config';
-import type { WordSyncMetric, CollisionItem } from './text-analyzer';
+import { CONFIG, type FrameMetrics, type FlagItem, type TextProbeRecord, type TextRun, type AudioEvent, type FindingItem, type CalibrationData } from './config';
+import { normalizeText, type WordSyncMetric, type CollisionItem } from './text-analyzer';
 import type { CutItem, HitItem } from './flags';
 
 export interface ReportContext {
@@ -50,11 +50,29 @@ export function generateReportMarkdown(
   const advisoryCount = flags.filter((f) => f.class === 'advisory').length;
   const infoCount = flags.filter((f) => f.class === 'info').length;
 
-  // Build findingsJson
+  // Build findingsJson with timestamp proximity evidence linking
   const findingsJson: FindingItem[] = flags.map((f) => {
     const matchingEvidence = ctx.evidenceFiles
-      .filter((ev) => ev.name.toLowerCase().includes(f.id.toLowerCase()) || ev.name.includes(f.t0.toFixed(2)))
+      .filter((ev) => {
+        if (ev.name.toLowerCase().includes(f.id.toLowerCase())) return true;
+        const match = ev.name.match(/_(\d+(?:\.\d+)?)\.(?:png|csv)$/);
+        if (match) {
+          const t = parseFloat(match[1]!);
+          if (Math.abs(t - f.t0) < 0.50 || (t >= f.t0 - 0.50 && t <= f.t1 + 0.50)) return true;
+        }
+        return false;
+      })
       .map((ev) => ev.name);
+
+    if (f.tier === 'tier_a_objective') {
+      if (ctx.evidenceFiles.some((ev) => ev.name === 'timeline.png') && !matchingEvidence.includes('timeline.png')) {
+        matchingEvidence.unshift('timeline.png');
+      }
+      if (ctx.evidenceFiles.some((ev) => ev.name === 'slitscan.png') && !matchingEvidence.includes('slitscan.png')) {
+        matchingEvidence.unshift('slitscan.png');
+      }
+    }
+
     return {
       id: f.id,
       tool: 'motion',
@@ -252,7 +270,7 @@ export function generateReportMarkdown(
   if (remWords > 0) wordsTable += `| ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | (+${remWords} more words) |\n`;
 
   // 6. Text runs (non-lyric)
-  const nonLyricRuns = runs.filter((r) => !words.some((w) => w.word.toLowerCase() === r.rawText.toLowerCase()));
+  const nonLyricRuns = runs.filter((r) => !words.some((w) => normalizeText(w.word) === r.normalizedText));
   const cappedNonLyric = nonLyricRuns.slice(0, ctx.topN);
   const remNL = nonLyricRuns.length - cappedNonLyric.length;
   let nlTable = '| string | slot | t0–t1 (s) | dur (s) | h% | distinct_strings_in_slot | notes |\n| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n';
@@ -283,19 +301,19 @@ export function generateReportMarkdown(
   let sStart = -1, eSum = 0;
   for (let i = 0; i < frames.length; i++) {
     const f = frames[i]!;
-    if (f.E < 0.001) {
+    if (f.E < CONFIG.eps_energy) {
       if (sStart < 0) { sStart = i; eSum = f.E; } else eSum += f.E;
     } else {
       if (sStart >= 0) {
         const durSeg = frames[i - 1]!.t - frames[sStart]!.t;
-        if (durSeg >= 0.5) staticSegments.push({ t0: frames[sStart]!.t, t1: frames[i - 1]!.t, kind: 'dead-motion', eMean: eSum / (i - sStart) });
+        if (durSeg >= CONFIG.dead_motion_s) staticSegments.push({ t0: frames[sStart]!.t, t1: frames[i - 1]!.t, kind: 'dead-motion', eMean: eSum / (i - sStart) });
         sStart = -1;
       }
     }
   }
-  if (sStart >= 0) {
+  if (sStart >= 0 && frames.length > 0) {
     const durSeg = frames[frames.length - 1]!.t - frames[sStart]!.t;
-    if (durSeg >= 0.5) staticSegments.push({ t0: frames[sStart]!.t, t1: frames[frames.length - 1]!.t, kind: 'dead-motion', eMean: eSum / (frames.length - sStart) });
+    if (durSeg >= CONFIG.dead_motion_s) staticSegments.push({ t0: frames[sStart]!.t, t1: frames[frames.length - 1]!.t, kind: 'dead-motion', eMean: eSum / (frames.length - sStart) });
   }
 
   // Blank runs
@@ -390,7 +408,7 @@ export function generateReportMarkdown(
 
     for (const m of metricsToCompare) {
       const dist = calData?.[m.key ?? ''];
-      if (dist) {
+      if (dist && dist.n > 0) {
         let status = 'within range';
         if (m.val < dist.p10) status = 'below range';
         else if (m.val > dist.p90) status = 'above range';
@@ -500,16 +518,17 @@ ${evidenceTable}
       info: infoCount,
     },
     metrics: {
-      cutRatePerSec: cuts.length / dur,
+      cutRatePerSec: dur > 0 ? cuts.length / dur : 0,
       cutCount: cuts.length,
-      energyMean: frames.reduce((a, b) => a + b.E, 0) / frames.length,
-      energyP95: frames.reduce((a, b) => a + b.E_p95, 0) / frames.length,
-      kickResponseRatioMedian: hits.length ? hits.map((h) => h.ratio).sort((a, b) => a - b)[Math.floor(hits.length / 2)] : 1.0,
-      textMaxSizeRatioMedian: words.length ? Math.max(...words.map((w) => w.peak_hPct)) / Math.max(0.1, Math.min(...words.filter((w) => w.peak_hPct > 0).map((w) => w.peak_hPct))) : 1.0,
-      signalPct: frames.reduce((a, b) => a + b.signal_pct, 0) / frames.length,
-      brightNonsignalPct: frames.reduce((a, b) => a + b.bright_nonsignal_pct, 0) / frames.length,
-      edgeDensity: frames.reduce((a, b) => a + b.edge_density, 0) / frames.length,
-      deadMotionFraction: frames.filter((f) => f.E < 0.001).length / frames.length,
+      energyMean: frames.length ? frames.reduce((a, b) => a + b.E, 0) / frames.length : 0,
+      energyP95: frames.length ? frames.reduce((a, b) => a + b.E_p95, 0) / frames.length : 0,
+      kickResponseRatioMedian: hits.length ? (hits.map((h) => h.ratio).sort((a, b) => a - b)[Math.floor(hits.length / 2)] ?? 1.0) : 1.0,
+      textMaxSizeRatioMedian: words.length ? (Math.max(...words.map((w) => w.peak_hPct)) / Math.max(0.1, Math.min(...words.filter((w) => w.peak_hPct > 0).map((w) => w.peak_hPct)))) : 1.0,
+      signalPct: frames.length ? frames.reduce((a, b) => a + b.signal_pct, 0) / frames.length : 0,
+      brightNonsignalPct: frames.length ? frames.reduce((a, b) => a + b.bright_nonsignal_pct, 0) / frames.length : 0,
+      otherPct: frames.length ? frames.reduce((a, b) => a + (b.other_pct ?? 0), 0) / frames.length : 0,
+      edgeDensity: frames.length ? frames.reduce((a, b) => a + b.edge_density, 0) / frames.length : 0,
+      deadMotionFraction: frames.length ? frames.filter((f) => f.E < CONFIG.eps_energy).length / frames.length : 0,
       perfP50Ms: p50Ms,
       perfP95Ms: p95Ms,
       perfMaxMs: maxMs,
@@ -552,10 +571,10 @@ ${evidenceTable}
 }
 
 export function generateFramesCsv(frames: FrameMetrics[]): string {
-  const header = 'n,t,E,E_p95,flow_dx,flow_dy,luma,contrast,edge_density,signal_pct,bright_nonsignal_pct,shimmer,segs,ms,spp\n';
+  const header = 'n,t,E,E_p95,flow_dx,flow_dy,luma,contrast,edge_density,signal_pct,bright_nonsignal_pct,other_pct,shimmer,segs,ms,spp\n';
   let rows = '';
   for (const f of frames) {
-    rows += `${f.n},${f.t.toFixed(4)},${f.E.toFixed(5)},${f.E_p95.toFixed(5)},${f.flow_dx.toFixed(2)},${f.flow_dy.toFixed(2)},${f.luma.toFixed(4)},${f.contrast.toFixed(4)},${f.edge_density.toFixed(5)},${f.signal_pct.toFixed(3)},${f.bright_nonsignal_pct.toFixed(3)},${f.shimmer.toFixed(5)},${f.segs},${f.ms.toFixed(2)},${f.spp}\n`;
+    rows += `${f.n},${f.t.toFixed(4)},${f.E.toFixed(5)},${f.E_p95.toFixed(5)},${f.flow_dx.toFixed(2)},${f.flow_dy.toFixed(2)},${f.luma.toFixed(4)},${f.contrast.toFixed(4)},${f.edge_density.toFixed(5)},${f.signal_pct.toFixed(3)},${f.bright_nonsignal_pct.toFixed(3)},${(f.other_pct ?? 0).toFixed(3)},${f.shimmer.toFixed(5)},${f.segs},${f.ms.toFixed(2)},${f.spp}\n`;
   }
   return header + rows;
 }

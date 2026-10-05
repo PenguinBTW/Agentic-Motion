@@ -31,7 +31,7 @@ All visual tools are implemented modularly in `app/scripts/visual/`, keeping `re
 
 ---
 
-## 3. Universal Procedural Motion Engine (v2.4.0)
+## 3. Universal Procedural Motion Engine (v0.5.0)
 
 The core engine in [`app/src/engine/`](./app/src/engine/) has been overhauled into a decoupled, domain-agnostic motion graphics platform. Complete architectural specifications, API signatures, and authoring guides are detailed in [**`tooling documentation/engine-architecture.md`**](./tooling%20documentation/engine-architecture.md).
 
@@ -144,7 +144,7 @@ Agentic motion design toolset/
 │   └── motion-report.md              # Telemetry report specification
 │
 └── tooling documentation/            # Comprehensive engineering & operational documentation
-    ├── engine-architecture.md        # Operational guide & API reference for 12 engine modules (v2.4.0)
+    ├── engine-architecture.md        # Operational guide & API reference for 12 engine modules (v0.5.0)
     ├── 01-godview-camera-blueprint.md # Operational guide for 3D God-View Blueprint
     ├── 02-multi-exposure-motion-onion.md # Operational guide for Multi-Exposure Motion Onion
     ├── 03-visual-ab-reference-anchor.md # Operational guide for Visual A/B Reference Anchor

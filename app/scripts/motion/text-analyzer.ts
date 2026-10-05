@@ -51,7 +51,8 @@ export function analyzeTextProbes(
   records: TextProbeRecord[],
   lyricsData: any,
   windowFrom: number,
-  windowTo: number
+  windowTo: number,
+  fps = 60
 ): TextAnalysisResult {
   // Sort records by frameIdx then y/x
   records.sort((a, b) => a.frameIdx - b.frameIdx || a.cy - b.cy || a.cx - b.cx);
@@ -83,7 +84,8 @@ export function analyzeTextProbes(
       for (let i = 0; i < remainingActive.length; i++) {
         const ar = remainingActive[i]!;
         const lastRec = ar.records[ar.records.length - 1]!;
-        if (ar.normalizedText === norm && fIdx === lastRec.frameIdx + 1) {
+        // Allow a small gap (gap <= 2) to prevent transient frame drops from splitting runs
+        if (ar.normalizedText === norm && fIdx >= lastRec.frameIdx + 1 && fIdx <= lastRec.frameIdx + 2) {
           const d = Math.hypot(rec.cx - lastRec.cx, rec.cy - lastRec.cy);
           if (d < minDist) {
             minDist = d;
@@ -238,10 +240,9 @@ export function analyzeTextProbes(
 
     let firstVis: number | null = null, lastVis: number | null = null;
     let peakH = 0, meanH = 0, travel = 0, clip = 0;
-    let visibleSungCount = 0, totalSungFrames = 0;
+    let visibleSungCount = 0;
 
-    const sungStartF = Math.round(tw.start * 60), sungEndF = Math.round(tw.end * 60);
-    totalSungFrames = Math.max(1, sungEndF - sungStartF);
+    const totalSungFrames = Math.max(1, Math.round((tw.end - tw.start) * fps) + 1);
 
     if (matchedRun) {
       firstVis = matchedRun.first_t;
@@ -251,10 +252,11 @@ export function analyzeTextProbes(
       travel = matchedRun.travel_px_s;
 
       // Count sung window overlap and measure clipping strictly while word is being sung
+      const visibleFrames = new Set<number>();
       let maxSungClip = 0;
       for (const rec of matchedRun.records) {
         if (rec.t >= tw.start && rec.t <= tw.end && rec.globalAlpha > 0.15) {
-          visibleSungCount++;
+          visibleFrames.add(rec.frameIdx);
           const area = Math.max(1, rec.w * rec.h);
           const inW = Math.max(0, Math.min(rec.bbox[2], 1920) - Math.max(rec.bbox[0], 0));
           const inH = Math.max(0, Math.min(rec.bbox[3], 1080) - Math.max(rec.bbox[1], 0));
@@ -263,10 +265,11 @@ export function analyzeTextProbes(
         }
       }
       clip = maxSungClip;
+      visibleSungCount = visibleFrames.size;
     }
 
     const appear_Δms = firstVis !== null ? Math.round((firstVis - tw.start) * 1000) : null;
-    const visPct = (visibleSungCount / totalSungFrames) * 100;
+    const visPct = Math.min(100, Math.max(0, (visibleSungCount / totalSungFrames) * 100));
 
     wordMetrics.push({
       word: tw.w,
@@ -312,7 +315,8 @@ export function analyzeTextProbes(
           const overlapPct = (interArea / smallerArea) * 100;
 
           if (overlapPct > CONFIG.text_collision_max_overlap_pct) {
-            const pairName = `"${A.text}" ∩ "${B.text}"`;
+            const sortedTexts = [A.text, B.text].sort();
+            const pairName = `"${sortedTexts[0]}" ∩ "${sortedTexts[1]}"`;
             const clipPct = Math.max(
               (1 - (Math.max(0, Math.min(A.bbox[2], 1920) - Math.max(A.bbox[0], 0)) * Math.max(0, Math.min(A.bbox[3], 1080) - Math.max(A.bbox[1], 0))) / (A.w * A.h)) * 100,
               (1 - (Math.max(0, Math.min(B.bbox[2], 1920) - Math.max(B.bbox[0], 0)) * Math.max(0, Math.min(B.bbox[3], 1080) - Math.max(B.bbox[1], 0))) / (B.w * B.h)) * 100
@@ -320,7 +324,7 @@ export function analyzeTextProbes(
 
             // Merge into existing contiguous collision
             const lastCol = collisions[collisions.length - 1];
-            if (lastCol && lastCol.pair === pairName && Math.abs(A.t - lastCol.t1) <= 1 / 30) {
+            if (lastCol && lastCol.pair === pairName && Math.abs(A.t - lastCol.t1) <= 1.5 / fps) {
               lastCol.t1 = A.t;
               lastCol.intersection_pct = Math.max(lastCol.intersection_pct, overlapPct);
               lastCol.clip_pct = Math.max(lastCol.clip_pct, clipPct);

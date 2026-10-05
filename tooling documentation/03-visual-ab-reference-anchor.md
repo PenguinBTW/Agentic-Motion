@@ -2,7 +2,7 @@
 
 **Status**: Implemented & Operational  
 **Source Implementation**: [`app/scripts/visual/compare.ts`](../app/scripts/visual/compare.ts)  
-**CLI Command**: `bun scripts/render.ts compare` or `bun scripts/visual/compare.ts`  
+**CLI Command**: `bun scripts/render.ts compare` or `bun scripts/compare.ts`  
 **Core Artifacts**: `ab_side_by_side.png`, `ab_split_wipe.png`, `compare_summary.json`  
 
 ---
@@ -90,7 +90,7 @@ Emits metadata linking the comparison session:
 bun scripts/render.ts compare --scene boundary --t 27.5 --ref loss --ref-t 14.2
 
 # Explicit output folder and reference port
-bun scripts/visual/compare.ts --scene hero --t 4.5 --ref brand_keyframe --ref-t 0.0 --out ../out/visual/compare
+bun scripts/compare.ts --scene hero --t 4.5 --ref brand_keyframe --ref-t 0.0 --out ../out/visual/compare
 ```
 
 ### Supported CLI Flags

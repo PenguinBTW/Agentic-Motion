@@ -1,4 +1,4 @@
-# Universal Agentic Motion Graphics Engine Architecture (v2.4.0)
+# Universal Agentic Motion Graphics Engine Architecture (v0.5.0)
 **Core Engine Implementation, API Reference & Developer Guide**
 
 **Status**: **100% IMPLEMENTED & VERIFIED** across all 4 Milestones  
@@ -9,7 +9,7 @@
 
 ## 1. Executive Overview
 
-The **Universal Agentic Motion Graphics Engine (v2.4.0)** is a high-performance procedural animation and rendering platform designed specifically for autonomous AI coding agents and human motion designers. It decouples the engine from any single project domain, providing a universal foundation for:
+The **Universal Agentic Motion Graphics Engine (v0.5.0)** is a high-performance procedural animation and rendering platform designed specifically for autonomous AI coding agents and human motion designers. It decouples the engine from any single project domain, providing a universal foundation for:
 
 * **Commercial Product Reveals & 3D Teasers** (device turntables, exploded engineering assemblies, lighting sweeps)
 * **UI/UX Animation & Interaction Showcases** (app walkthroughs, sheet transitions, micro-interactions, isometric UI flows)
@@ -29,12 +29,12 @@ $$\text{Frame} = f(t)$$
 * **Sub-Frame Adaptive Motion Blur (1 to 324 spp)**: The engine samples up to 324 sub-frames per frame over the shutter window (`Engine.render`). Stateless closed-form evaluation guarantees bit-identical results without ghosting or temporal stepping.
 
 ### 2.2 WebGL State Cache Invariant
-To prevent state leaks between raw WebGL / shader passes and Three.js internal render pipelines, all batch renderers ([`SDFBatch`](file:///c:/Users/brosf/Documents/A%20vio%20projects/VioPls/Agentic%20motion%20design%20toolset/app/src/engine/sdf.ts), [`LineBatch`](file:///c:/Users/brosf/Documents/A%20vio%20projects/VioPls/Agentic%20motion%20design%20toolset/app/src/engine/lines.ts), [`AnalyticalParticles`](file:///c:/Users/brosf/Documents/A%20vio%20projects/VioPls/Agentic%20motion%20design%20toolset/app/src/engine/particles.ts), [`CompositorGraph`](file:///c:/Users/brosf/Documents/A%20vio%20projects/VioPls/Agentic%20motion%20design%20toolset/app/src/engine/graph.ts)) strictly enforce `renderer.resetState()` immediately after drawing.
+To prevent state leaks between raw WebGL / shader passes and Three.js internal render pipelines, all batch renderers ([`SDFBatch`](../app/src/engine/sdf.ts), [`LineBatch`](../app/src/engine/lines.ts), [`AnalyticalParticles`](../app/src/engine/particles.ts), [`CompositorGraph`](../app/src/engine/graph.ts)) strictly enforce `renderer.resetState()` immediately after drawing.
 
 ### 2.3 PCIe Bandwidth Saturation Elimination
 High-throughput buffers use static or single-pass allocations:
 * Particle attributes are populated once using `THREE.StaticDrawUsage` in `addEmitter()`, eliminating the 75 MB/frame PCIe transfer bottleneck under multi-sampling.
-* Procedural vector shapes (cards, rings, reticles) are drawn on the GPU via instanced SDF quads ([`SDFBatch`](file:///c:/Users/brosf/Documents/A%20vio%20projects/VioPls/Agentic%20motion%20design%20toolset/app/src/engine/sdf.ts)) rather than dirtying 33.2 MB Canvas2D surfaces at 4K.
+* Procedural vector shapes (cards, rings, reticles) are drawn on the GPU via instanced SDF quads ([`SDFBatch`](../app/src/engine/sdf.ts)) rather than dirtying 33.2 MB Canvas2D surfaces at 4K.
 
 ### 2.4 Strict Font Loading Gate
 `engine.init()` and `defineScene.init()` strictly await `document.fonts.ready` prior to evaluating Frame 0, preventing flash-of-unstyled-text (FOUT) glitches and zero-width text measurement errors that trigger false telemetry warnings.
@@ -66,7 +66,7 @@ app/src/engine/
 
 ---
 
-### Module 1: Universal Dual-Mode 6-DOF Camera Rig ([`rig.ts`](file:///c:/Users/brosf/Documents/A%20vio%20projects/VioPls/Agentic%20motion%20design%20toolset/app/src/engine/rig.ts))
+### Module 1: Universal Dual-Mode 6-DOF Camera Rig ([`rig.ts`](../app/src/engine/rig.ts))
 Handles Cinematic Perspective (14mm–200mm) and Technical Isometric projections with centripetal Catmull-Rom arc-length spline flight and analytical trauma shake.
 
 ```typescript
@@ -86,7 +86,7 @@ export class CameraRig {
 
 ---
 
-### Module 2: Transform Hierarchy & Responsive Layout ([`transform.ts`](file:///c:/Users/brosf/Documents/A%20vio%20projects/VioPls/Agentic%20motion%20design%20toolset/app/src/engine/transform.ts))
+### Module 2: Transform Hierarchy & Responsive Layout ([`transform.ts`](../app/src/engine/transform.ts))
 Hierarchical scene graph with local 3D anchor offsets, dirty-flag matrix concatenation, responsive viewport safe-zone pins, and 3D vertex pinning.
 
 ```typescript
@@ -110,7 +110,7 @@ export class LayoutNode extends TransformNode {
 
 ---
 
-### Module 3: Universal Kinetic Typography ([`text.ts`](file:///c:/Users/brosf/Documents/A%20vio%20projects/VioPls/Agentic%20motion%20design%20toolset/app/src/engine/text.ts))
+### Module 3: Universal Kinetic Typography ([`text.ts`](../app/src/engine/text.ts))
 Multi-line typography engine with word wrapping, 3D billboarding, character/word staggered animators, ink knockout halos, numeric rollers, and automatic telemetry tracking.
 
 ```typescript
@@ -130,7 +130,7 @@ export class KineticText {
 
 ---
 
-### Module 4: Analytic GPU Signed Distance Fields ([`sdf.ts`](file:///c:/Users/brosf/Documents/A%20vio%20projects/VioPls/Agentic%20motion%20design%20toolset/app/src/engine/sdf.ts))
+### Module 4: Analytic GPU Signed Distance Fields ([`sdf.ts`](../app/src/engine/sdf.ts))
 High-performance instanced quad batcher rendering procedural vector graphics directly on the GPU using analytical SDF formulas.
 
 ```typescript
@@ -150,7 +150,7 @@ export class SDFBatch {
 
 ---
 
-### Module 5: Universal Motion Bus & Physical Solvers ([`motion.ts`](file:///c:/Users/brosf/Documents/A%20vio%20projects/VioPls/Agentic%20motion%20design%20toolset/app/src/engine/motion.ts))
+### Module 5: Universal Motion Bus & Physical Solvers ([`motion.ts`](../app/src/engine/motion.ts))
 Stateless physics solvers, procedural LFOs, and stagger distributions.
 
 ```typescript
@@ -175,7 +175,7 @@ export const motion: MotionBus;
 
 ---
 
-### Module 6: Stateless Analytical GPU Particles ([`particles.ts`](file:///c:/Users/brosf/Documents/A%20vio%20projects/VioPls/Agentic%20motion%20design%20toolset/app/src/engine/particles.ts))
+### Module 6: Stateless Analytical GPU Particles ([`particles.ts`](../app/src/engine/particles.ts))
 Closed-form particle system executed completely on the GPU:
 $$p_i(t) = p_{0, i} + \vec{v}_{0, i} \tau + \frac{1}{2} \vec{g} \tau^2 + \vec{\mathcal{N}}_{\text{fbm}}(p_{0, i} + \vec{v}_{0, i} \tau, t)$$
 where $\tau = (t - t_{\text{birth}, i}) \pmod{\text{lifetime}}$.
@@ -193,7 +193,7 @@ export class AnalyticalParticles {
 
 ---
 
-### Module 7: Scoped Render Graph & Track Matte Compositor ([`graph.ts`](file:///c:/Users/brosf/Documents/A%20vio%20projects/VioPls/Agentic%20motion%20design%20toolset/app/src/engine/graph.ts))
+### Module 7: Scoped Render Graph & Track Matte Compositor ([`graph.ts`](../app/src/engine/graph.ts))
 Multi-layer compositor supporting dual-texture alpha/luma track mattes and custom blend modes.
 
 ```typescript
@@ -214,7 +214,7 @@ export class CompositorGraph {
 
 ---
 
-### Module 8: Semantic Scene Graph & Entity Introspection ([`scenegraph.ts`](file:///c:/Users/brosf/Documents/A%20vio%20projects/VioPls/Agentic%20motion%20design%20toolset/app/src/engine/scenegraph.ts))
+### Module 8: Semantic Scene Graph & Entity Introspection ([`scenegraph.ts`](../app/src/engine/scenegraph.ts))
 Central entity registry providing automatic 3D-to-2D screen bounding box projection, role querying, geometric collision detection, and telemetry synchronization.
 
 ```typescript
@@ -233,7 +233,7 @@ export class SceneGraph {
 
 ---
 
-### Module 9: Multi-Format Delivery & Headless Export Pipeline ([`export.ts`](file:///c:/Users/brosf/Documents/A%20vio%20projects/VioPls/Agentic%20motion%20design%20toolset/app/src/engine/export.ts))
+### Module 9: Multi-Format Delivery & Headless Export Pipeline ([`export.ts`](../app/src/engine/export.ts))
 Generates production-grade FFmpeg arguments, Playwright headless flags, and delivery presets.
 
 ```typescript
@@ -254,7 +254,7 @@ export class ExportPipeline {
 
 ---
 
-### Module 10: Pluggable Brand Design Token System ([`tokens.ts`](file:///c:/Users/brosf/Documents/A%20vio%20projects/VioPls/Agentic%20motion%20design%20toolset/app/src/engine/tokens.ts))
+### Module 10: Pluggable Brand Design Token System ([`tokens.ts`](../app/src/engine/tokens.ts))
 Dynamic token registry connecting the renderer, HUD, and the telemetry auditor (`F12: palette_off_share`).
 
 ```typescript
@@ -282,11 +282,11 @@ export function getDesignTokens(): DesignTokens;
 export function tokenToLinear(key: string): [number, number, number];
 export function tokenToRgba(key: string, a?: number): string;
 ```
-* **Dynamic Proxies**: [`LIN`](file:///c:/Users/brosf/Documents/A%20vio%20projects/VioPls/Agentic%20motion%20design%20toolset/app/src/engine/palette.ts) and [`rgba()`](file:///c:/Users/brosf/Documents/A%20vio%20projects/VioPls/Agentic%20motion%20design%20toolset/app/src/engine/palette.ts) are dynamic Proxies reading from active tokens in real-time, eliminating hardcoded color assumptions.
+* **Dynamic Proxies**: [`LIN`](../app/src/engine/palette.ts) and [`rgba()`](../app/src/engine/palette.ts) are dynamic Proxies reading from active tokens in real-time, eliminating hardcoded color assumptions.
 
 ---
 
-### Module 11: Directorial Self-Correction Contract ([`heal.ts`](file:///c:/Users/brosf/Documents/A%20vio%20projects/VioPls/Agentic%20motion%20design%20toolset/app/src/engine/heal.ts))
+### Module 11: Directorial Self-Correction Contract ([`heal.ts`](../app/src/engine/heal.ts))
 Translates diagnostic signals from the 9 visual instruments and telemetry rules into machine-actionable repair directives emitted into `findings.json`.
 
 ```typescript
@@ -318,7 +318,7 @@ export class AgentHeal {
 
 ---
 
-### Module 12: Declarative Scene Authoring DSL & Strict Lifecycle ([`dsl.ts`](file:///c:/Users/brosf/Documents/A%20vio%20projects/VioPls/Agentic%20motion%20design%20toolset/app/src/engine/dsl.ts))
+### Module 12: Declarative Scene Authoring DSL & Strict Lifecycle ([`dsl.ts`](../app/src/engine/dsl.ts))
 Factory pattern that protects autonomous coding agents from boilerplate errors.
 
 ```typescript

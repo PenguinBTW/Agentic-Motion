@@ -2,7 +2,7 @@
 
 **Status**: Implemented & Operational  
 **Source Implementation**: [`app/scripts/visual/onion.ts`](../app/scripts/visual/onion.ts)  
-**CLI Command**: `bun scripts/render.ts onion` or `bun scripts/visual/onion.ts`  
+**CLI Command**: `bun scripts/render.ts onion` or `bun scripts/onion.ts`  
 **Core Artifacts**: `onion_motion.png`, `onion_summary.json`  
 
 ---
@@ -91,10 +91,10 @@ Emits quantitative metadata detailing the temporal sampling window:
 bun scripts/render.ts onion --t 10.0 --out ../out/visual/onion
 
 # Audit a rapid UI spring interaction with a tight 0.3s window and 14 frames
-bun scripts/visual/onion.ts --t 4.25 --window 0.3 --frames 14 --out ../out/visual/onion
+bun scripts/onion.ts --t 4.25 --window 0.3 --frames 14 --out ../out/visual/onion
 
 # Inspect an entire scene range
-bun scripts/visual/onion.ts --scene card_expand --from 8.2 --to 9.4 --frames 16
+bun scripts/onion.ts --scene card_expand --from 8.2 --to 9.4 --frames 16
 ```
 
 ### Supported CLI Flags

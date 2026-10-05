@@ -253,7 +253,7 @@ export class KineticText {
   syncTelemetry(t: number, screenX = this.anchorPos[0], screenY = this.anchorPos[1]): void {
     if (typeof window === 'undefined') return;
     const P = (window as any).__pdoom;
-    if (!P || !P.probe || !P.textProbes || !P.recordText) return;
+    if (!P || !P.textProbes || P.recordText === false) return;
 
     const effFontSize = this.style.fontSize * (this.is3DAnchored ? this.depthScale : 1.0);
     const lineH = effFontSize * this.style.lineHeight;
@@ -355,7 +355,8 @@ export class KineticText {
     // Only emit direct telemetry if Canvas2D text probe hook is NOT active
     // This prevents double-counting and eliminates false F04 typographic collisions.
     const P = typeof window !== 'undefined' ? (window as any).__pdoom : null;
-    if (!P?.probe) {
+    const hookActive = typeof window !== 'undefined' && Boolean((window as any).__textHookActive || (window as any).__pdoom_hookActive);
+    if (P?.probe && P.recordText !== false && !hookActive) {
       this.syncTelemetry(t, x, y);
     }
   }

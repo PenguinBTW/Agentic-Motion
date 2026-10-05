@@ -2,7 +2,7 @@
 
 **Status**: Implemented & Operational  
 **Source Implementation**: [`app/scripts/visual/stitch.ts`](../app/scripts/visual/stitch.ts)  
-**CLI Command**: `bun scripts/render.ts stitch` or `bun scripts/visual/stitch.ts`  
+**CLI Command**: `bun scripts/render.ts stitch` or `bun scripts/stitch.ts`  
 **Core Artifacts**: `onion_seam.png`, `strip_seam.png`, `stitch_summary.json`  
 
 ---
@@ -95,7 +95,7 @@ Emits metadata detailing the seam transition:
 bun scripts/render.ts stitch --from-scene boundary --to-scene hook --out ../out/visual/stitch
 
 # Inspect a cut at an exact timestamp
-bun scripts/visual/stitch.ts --t 25.60 --out ../out/visual/stitch
+bun scripts/stitch.ts --t 25.60 --out ../out/visual/stitch
 ```
 
 ### Supported CLI Flags

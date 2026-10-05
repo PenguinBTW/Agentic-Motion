@@ -2,7 +2,7 @@
 
 **Status**: Implemented & Operational  
 **Source Implementation**: [`app/scripts/visual/godview.ts`](../app/scripts/visual/godview.ts)  
-**CLI Command**: `bun scripts/render.ts godview` or `bun scripts/visual/godview.ts`  
+**CLI Command**: `bun scripts/render.ts godview` or `bun scripts/godview.ts`  
 **Core Artifacts**: `cam_godview.png`, `godview_summary.json`  
 
 ---
@@ -93,7 +93,7 @@ Accompanying the image is machine-readable telemetry recording exact spatial kin
 bun scripts/render.ts godview --scene product_reveal --out ../out/visual/godview
 
 # Specify an exact time window and sample density
-bun scripts/visual/godview.ts --from 4.0 --to 12.0 --samples 32 --out ../out/visual/godview
+bun scripts/godview.ts --from 4.0 --to 12.0 --samples 32 --out ../out/visual/godview
 
 # Quick audit of a camera fly-through
 bun scripts/render.ts godview --from 0.0 --to 18.5 --samples 40

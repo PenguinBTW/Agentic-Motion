@@ -1,11 +1,11 @@
 # Engine Architectural Review & Universal Agentic Motion Graphics Roadmap
 
 > [!NOTE]
-> **ROADMAP EXECUTION COMPLETE & FULLY VERIFIED (v2.4.0)**:
+> **ROADMAP EXECUTION COMPLETE & FULLY VERIFIED (v0.5.0)**:
 > All 4 milestones of this roadmap have been fully implemented, verified via automated test suites, and audited by independent subagents.
 > For the complete active implementation guide, API reference, and scene authoring documentation, see [**Operational Engine Architecture & API Reference (`engine-architecture.md`)](./engine-architecture.md)**.
 
-**Document Version**: 2.4.0  
+**Document Version**: 0.5.0  
 **Scope**: Universal Agentic Motion Graphics & Animation Platform — applicable to **all motion graphic design genres**:
 * **Commercials & 3D Product Teasers** (device turntable reveals, screen cascades, exploded engineering assemblies)
 * **UI/UX Animation & Interaction Showcases** (app walkthroughs, sheet transitions, micro-interactions, isometric UI flows)
@@ -68,7 +68,7 @@ To transform this foundation into a universal platform for any motion design gen
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│            UNIVERSAL AGENTIC MOTION GRAPHICS ENGINE (v2.2.0)           │
+│            UNIVERSAL AGENTIC MOTION GRAPHICS ENGINE (v0.5.0)           │
 ├────────────────────────────────────────────────────────────────────────┤
 │  [11. Agent Director Loop]  ──> Machine-Actionable Remediation Engine   │
 ├────────────────────────────────────────────────────────────────────────┤

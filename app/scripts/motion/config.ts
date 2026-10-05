@@ -302,6 +302,7 @@ export interface FrameMetrics {
   E_p95: number;
   flow_dx: number; // px/s at 1920 scale
   flow_dy: number; // px/s at 1920 scale
+  flow_invalid?: boolean;
   luma: number;
   contrast: number;
   edge_density: number;

@@ -12,17 +12,23 @@ export interface GodViewOptions {
   to?: number;
   samples?: number;
   out?: string;
+  corridor?: boolean;
+}
+
+function isFlagVal(val?: string): boolean {
+  return typeof val === 'string' && !val.startsWith('--');
 }
 
 export function parseGodViewArgs(argv: string[]): GodViewOptions {
   const opts: GodViewOptions = {};
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
-    if (arg === '--from' && argv[i + 1]) opts.from = parseFloat(argv[++i]!);
-    else if (arg === '--to' && argv[i + 1]) opts.to = parseFloat(argv[++i]!);
-    else if (arg === '--samples' && argv[i + 1]) opts.samples = parseInt(argv[++i]!, 10);
-    else if (arg === '--scene' && argv[i + 1]) opts.scene = argv[++i]!;
-    else if (arg === '--out' && argv[i + 1]) opts.out = argv[++i]!;
+    if (arg === '--from' && isFlagVal(argv[i + 1])) { const v = parseFloat(argv[++i]!); if (Number.isFinite(v)) opts.from = v; }
+    else if (arg === '--to' && isFlagVal(argv[i + 1])) { const v = parseFloat(argv[++i]!); if (Number.isFinite(v)) opts.to = v; }
+    else if (arg === '--samples' && isFlagVal(argv[i + 1])) { const v = parseInt(argv[++i]!, 10); if (Number.isFinite(v)) opts.samples = Math.max(2, Math.min(128, v)); }
+    else if (arg === '--scene' && isFlagVal(argv[i + 1])) { opts.scene = argv[++i]!; }
+    else if (arg === '--out' && isFlagVal(argv[i + 1])) { opts.out = argv[++i]!; }
+    else if (arg === '--corridor') { opts.corridor = true; }
   }
   return opts;
 }
@@ -30,32 +36,40 @@ export function parseGodViewArgs(argv: string[]): GodViewOptions {
 export async function runGodView(page: Page, argv: string[] = []): Promise<void> {
   const opts = parseGodViewArgs(argv);
 
-  let from = opts.from;
-  let to = opts.to;
-  const numSamples = opts.samples ?? 24;
-
-  if (from === undefined || to === undefined) {
+  if (opts.from === undefined || opts.to === undefined) {
     const tl: { id: string; start: number; end: number }[] = await page.evaluate(
-      () => (window as any).__pdoom.timeline || []
+      () => (window as any).__pdoom?.timeline || []
     );
     if (opts.scene && tl.length > 0) {
       const match = tl.find((e) => e.id === opts.scene);
       if (match) {
-        from = match.start;
-        to = match.end;
+        if (opts.from === undefined) opts.from = match.start;
+        if (opts.to === undefined) opts.to = match.end;
       }
     }
-    if (from === undefined) from = 8.00;
-    if (to === undefined) to = 18.50;
   }
 
-  const outDir = path.resolve(opts.out ?? path.join(process.cwd(), '../out/visual/godview'));
+  let from = opts.from;
+  let to = opts.to;
+  if (from === undefined && to !== undefined) from = Math.max(0, to - 10.0);
+  else if (to === undefined && from !== undefined) to = from + 10.0;
+  else if (from === undefined && to === undefined) {
+    from = 8.00;
+    to = 18.50;
+  }
+  const numSamples = opts.samples ?? 24;
+
+  const ROOT = path.resolve(import.meta.dir, '../../..');
+  const defaultOut = path.join(ROOT, 'out/visual/godview');
+  const outDir = path.resolve(opts.out ?? defaultOut);
   mkdirSync(outDir, { recursive: true });
 
   console.log(`[godview] Rendering 3D God-View camera blueprint for [${from.toFixed(2)}–${to.toFixed(2)}s] (${numSamples} samples)...`);
 
+  const showCorridor = Boolean(opts.corridor || (opts.scene && (opts.scene.includes('doors') || opts.scene.includes('corridor'))));
+
   const result: { dataUrl: string; summary: any } = await page.evaluate(
-    async ({ t0, t1, N }: { t0: number; t1: number; N: number }) => {
+    async ({ t0, t1, N, showCorridor, sceneName }: { t0: number; t1: number; N: number; showCorridor: boolean; sceneName: string }) => {
       const P = (window as any).__pdoom;
       const W = 1920;
       const H = 1080;
@@ -172,27 +186,29 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
         ctx.stroke();
       }
 
-      // Draw corridor walls / world geometry boundaries (±1.8m corridor width)
-      const leftWallX = toScreenX(-1.8);
-      const rightWallX = toScreenX(1.8);
-      ctx.strokeStyle = 'rgba(238, 233, 223, 0.25)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(leftWallX, toScreenZ(maxZ), rightWallX - leftWallX, toScreenZ(minZ) - toScreenZ(maxZ));
+      // Draw corridor walls / world geometry boundaries if corridor scene enabled
+      if (showCorridor) {
+        const leftWallX = toScreenX(-1.8);
+        const rightWallX = toScreenX(1.8);
+        ctx.strokeStyle = 'rgba(238, 233, 223, 0.25)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(leftWallX, toScreenZ(maxZ), rightWallX - leftWallX, toScreenZ(minZ) - toScreenZ(maxZ));
 
-      ctx.font = '11px monospace';
-      ctx.fillStyle = 'rgba(238, 233, 223, 0.40)';
-      ctx.fillText('◄ LEFT CORRIDOR WALL (x = -1.8m)', leftWallX - 220, pAY + 60);
-      ctx.fillText('RIGHT CORRIDOR WALL (x = +1.8m) ►', rightWallX + 16, pAY + 60);
+        ctx.font = '11px monospace';
+        ctx.fillStyle = 'rgba(238, 233, 223, 0.40)';
+        ctx.fillText('◄ LEFT CORRIDOR WALL (x = -1.8m)', leftWallX - 220, pAY + 60);
+        ctx.fillText('RIGHT CORRIDOR WALL (x = +1.8m) ►', rightWallX + 16, pAY + 60);
 
-      // Draw Door frames along Z every 2.2m
-      ctx.strokeStyle = 'rgba(255, 77, 18, 0.25)';
-      ctx.lineWidth = 1;
-      for (let dz = 0; dz <= maxZ; dz += 2.2) {
-        const sy = toScreenZ(dz);
-        // Left door notch
-        ctx.strokeRect(leftWallX - 8, sy - 2, 8, 4);
-        // Right door notch
-        ctx.strokeRect(rightWallX, sy - 2, 8, 4);
+        // Draw Door frames along Z every 2.2m
+        ctx.strokeStyle = 'rgba(255, 77, 18, 0.25)';
+        ctx.lineWidth = 1;
+        for (let dz = 0; dz <= maxZ; dz += 2.2) {
+          const sy = toScreenZ(dz);
+          // Left door notch
+          ctx.strokeRect(leftWallX - 8, sy - 2, 8, 4);
+          // Right door notch
+          ctx.strokeRect(rightWallX, sy - 2, 8, 4);
+        }
       }
 
       // Draw Camera Flight Path Ribbon
@@ -324,8 +340,24 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
       return {
         dataUrl: cv.toDataURL('image/png'),
         summary: {
+          scene: sceneName,
           from: t0,
           to: t1,
+          duration: t1 - t0,
+          sample_count: samples.length,
+          max_speed_mps: Math.max(...samples.map((s) => s.v)),
+          avg_speed_mps: samples.reduce((acc, s) => acc + s.v, 0) / (samples.length || 1),
+          min_near_distance_m: Math.min(...samples.map((s) => Math.max(0.01, 1.8 - Math.abs(s.x)))),
+          samples: samples.map((s) => ({
+            t: s.t,
+            x: s.x,
+            y: s.y,
+            z: s.z,
+            fx: s.fx,
+            fy: s.fy,
+            fz: s.fz,
+            v: s.v,
+          })),
           total_travel_z_m: maxZ - minZ,
           max_speed_m_s: Math.max(...samples.map((s) => s.v)),
           min_speed_m_s: Math.min(...samples.map((s) => s.v)),
@@ -335,7 +367,7 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
         },
       };
     },
-    { t0: from, t1: to, N: numSamples }
+    { t0: from, t1: to, N: numSamples, showCorridor, sceneName: opts.scene ?? 'all' }
   );
 
   const base64Data = result.dataUrl.replace(/^data:image\/png;base64,/, '');

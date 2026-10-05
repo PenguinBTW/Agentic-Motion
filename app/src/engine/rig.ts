@@ -174,25 +174,28 @@ export class CameraRig {
       upRef = [0, 0, Fw[1] > 0 ? -1 : 1];
     }
 
-    // R0 = vnorm(upRef x Fw)
-    const rx = upRef[1] * Fw[2] - upRef[2] * Fw[1];
-    const ry = upRef[2] * Fw[0] - upRef[0] * Fw[2];
-    const rz = upRef[0] * Fw[1] - upRef[1] * Fw[0];
+    // Camera backward vector in world space: B = -Fw
+    // Orthonormal basis maintaining right-handed convention (det = +1):
+    // R0 = vnorm(upRef x B)
+    const B: V3 = [-Fw[0], -Fw[1], -Fw[2]];
+    const rx = upRef[1] * B[2] - upRef[2] * B[1];
+    const ry = upRef[2] * B[0] - upRef[0] * B[2];
+    const rz = upRef[0] * B[1] - upRef[1] * B[0];
     const rlen = Math.hypot(rx, ry, rz) || 1.0;
     const R0: V3 = [rx / rlen, ry / rlen, rz / rlen];
 
-    // U0 = Fw x R0
+    // U0 = B x R0
     const U0: V3 = [
-      Fw[1] * R0[2] - Fw[2] * R0[1],
-      Fw[2] * R0[0] - Fw[0] * R0[2],
-      Fw[0] * R0[1] - Fw[1] * R0[0],
+      B[1] * R0[2] - B[2] * R0[1],
+      B[2] * R0[0] - B[0] * R0[2],
+      B[0] * R0[1] - B[1] * R0[0],
     ];
 
     // Apply roll rotation
     const cosR = Math.cos(roll);
     const sinR = Math.sin(roll);
     const R: V3 = [R0[0] * cosR + U0[0] * sinR, R0[1] * cosR + U0[1] * sinR, R0[2] * cosR + U0[2] * sinR];
-    const U: V3 = [U0[0] * cosR - R0[0] * sinR, U0[1] * cosR - R0[1] * sinR, U0[2] * cosR - R0[0] * sinR];
+    const U: V3 = [U0[0] * cosR - R0[0] * sinR, U0[1] * cosR - R0[1] * sinR, U0[2] * cosR - R0[2] * sinR];
 
     return {
       p,

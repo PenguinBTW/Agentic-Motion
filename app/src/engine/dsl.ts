@@ -106,6 +106,8 @@ export class SceneContext {
         opacity: opts?.alpha ?? 1.0,
         text: content,
         fontPx: opts?.fontSize ?? 36,
+        fontFamily: opts?.fontFamily ?? 'Archivo, sans-serif',
+        fillStyle: opts?.color ?? '#FFFFFF',
       });
     } else {
       if (opts) kt.updateStyle(opts);
@@ -114,6 +116,8 @@ export class SceneContext {
       if (meta) {
         meta.text = content;
         if (opts?.fontSize) meta.fontPx = opts.fontSize;
+        if (opts?.fontFamily) meta.fontFamily = opts.fontFamily;
+        if (opts?.color) meta.fillStyle = opts.color;
         if (opts?.alpha !== undefined) meta.opacity = opts.alpha;
       }
     }

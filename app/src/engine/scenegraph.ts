@@ -21,6 +21,8 @@ export interface EntityMetadata {
   opacity: number;
   text?: string;
   fontPx?: number;
+  fontFamily?: string;
+  fillStyle?: string;
 }
 
 export interface CollisionEvent {
@@ -175,9 +177,9 @@ export class SceneGraph {
         frameIdx: P.currentFrameIdx ?? 0,
         t,
         text: e.text ?? e.id,
-        fontFamily: 'Archivo, sans-serif',
+        fontFamily: e.fontFamily ?? 'Archivo, sans-serif',
         fontPx: e.fontPx ?? 24,
-        fillStyle: '#FFFFFF',
+        fillStyle: e.fillStyle ?? '#FFFFFF',
         globalAlpha: e.opacity,
         layerId: 'scenegraph',
         bbox: [minX, minY, maxX, maxY],

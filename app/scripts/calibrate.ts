@@ -107,17 +107,26 @@ const allMetrics: Record<string, number[]> = {
   samplerMaxSpp: [],
 };
 
-const browser = await chromium.launch({
-  channel: 'chrome',
-  headless: true,
-  args: [
-    '--use-angle=vulkan',
-    '--enable-gpu-rasterization',
-    '--ignore-gpu-blocklist',
-    '--disable-background-timer-throttling',
-    '--disable-renderer-backgrounding',
-  ],
-});
+const launchArgs = [
+  '--use-angle=vulkan',
+  '--enable-gpu-rasterization',
+  '--ignore-gpu-blocklist',
+  '--disable-background-timer-throttling',
+  '--disable-renderer-backgrounding',
+];
+let browser;
+try {
+  browser = await chromium.launch({
+    channel: 'chrome',
+    headless: true,
+    args: launchArgs,
+  });
+} catch {
+  browser = await chromium.launch({
+    headless: true,
+    args: launchArgs,
+  });
+}
 
 try {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
@@ -324,6 +333,15 @@ try {
     allMetrics.otherPct!.push(othMean);
     allMetrics.shimmer!.push(shimMean);
     allMetrics.deadMotionFraction!.push(deadFrac);
+
+    let plateCuts = 0;
+    for (let i = 1; i < frameCount; i++) {
+      if (Math.abs(frameLumas[i]! - frameLumas[i - 1]!) > 0.35 || frameEs[i]! > 0.15) {
+        plateCuts++;
+      }
+    }
+    const windowDur = Math.max(0.001, to - from);
+    allMetrics.cutRatePerSec!.push(plateCuts / windowDur);
 
     // Audio hit responses in window
     if (audioData?.onsets?.kick) {

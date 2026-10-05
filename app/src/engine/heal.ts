@@ -1,5 +1,5 @@
-// Directorial Self-Correction Contract (AgentDirectorLoop & agent-heal)
-// Maps signals from diagnostic telemetry and the 9 visual instruments
+// Directorial Self-Correction Contract (AgentHeal)
+// Maps signals from diagnostic telemetry and visual instruments (4 implemented, 5 proposed roadmap)
 // into machine-actionable repair directives emitted into findings.json.
 
 export type ActionType =
@@ -161,7 +161,7 @@ export class AgentHeal {
             action: 'ADJUST_CAMERA',
             target_file: targetFile,
             target_line_hint: 'rig.setPath waypoint',
-            recommended_patch: `pos: [pos.x, pos.y, pos.z - 0.5], focalLength: 50 // Retract waypoint along gaze normal`,
+            recommended_patch: `pos: [pos[0], pos[1], pos[2] - 0.5], focalLength: 50 // Retract waypoint along gaze normal`,
             explanation: `Camera penetrates near-clip frustum (${dist.toFixed(2)}m < 0.10m). Retract waypoint 0.5m backwards or lengthen focal length.`,
           },
         };
@@ -202,8 +202,8 @@ export class AgentHeal {
           remediation_directive: {
             action: 'MUTATE_PROPERTY',
             target_file: targetFile,
-            target_line_hint: 'particles.speed or lines.opacity',
-            recommended_patch: `particles.speed = 0.5; lines.opacity = 0.25; // Dim peripheral elements`,
+            target_line_hint: 'particles / lines styling',
+            recommended_patch: `ctx.lines.seg(..., col[0], col[1], col[2], 0.25); // Dim peripheral line luminance`,
             explanation: `Hero element captures only ${share.toFixed(0)}% visual gaze (target >= 60%). Lower peripheral particle velocity and line luminance.`,
           },
         };
@@ -220,8 +220,8 @@ export class AgentHeal {
           remediation_directive: {
             action: 'ADJUST_LAYOUT',
             target_file: targetFile,
-            target_line_hint: 'node.pin',
-            recommended_patch: `node.pin = 'top-center'; node.margin = { top: 64 }; // Responsive center anchor`,
+            target_line_hint: 'node.setPin',
+            recommended_patch: `node.setPin('top-center', { top: 64 }); // Responsive center anchor`,
             explanation: `Element overflows 9:16 vertical safe zone. Pin to top-center with inward margin.`,
           },
         };
@@ -256,8 +256,8 @@ export class AgentHeal {
           remediation_directive: {
             action: 'ADJUST_LAYOUT',
             target_file: targetFile,
-            target_line_hint: 'node.setMargins or clamp screen bounds',
-            recommended_patch: `node.setMargins({ left: 64, right: 64 })`,
+            target_line_hint: 'node.setPin or clamp screen bounds',
+            recommended_patch: `node.setPin('top-left', { left: 64, right: 64 }); // Pull responsive margins inward`,
             explanation: `Element extends past screen border (0 or W/H). Pull responsive margins inward by 64px.`,
           },
         };
@@ -275,7 +275,7 @@ export class AgentHeal {
             action: 'ADJUST_TIMING',
             target_file: targetFile,
             target_line_hint: 'exit transition',
-            recommended_patch: `const exitAlpha = 1 - ease.inQuad(Math.max(0, (lt - 4.0) / 0.5));`,
+            recommended_patch: `const exitAlpha = 1 - motion.bezier('in-quad', Math.max(0, Math.min(1, (t - exitStart) / 0.5)));`,
             explanation: `Element remains active without motion for > 6s. Add a smooth exit fade or spring dismiss.`,
           },
         };

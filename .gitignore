@@ -1,0 +1,31 @@
+# Dependencies
+**/node_modules/
+
+# Build output and generated reports
+**/dist/
+**/build/
+**/coverage/
+**/playwright-report/
+**/test-results/
+
+# Tool and bundler caches
+**/.cache/
+**/.parcel-cache/
+**/.turbo/
+**/.vite/
+
+# Font assets
+**/font/
+**/fonts/
+
+# Local environment and machine-specific files
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+
+# Logs and TypeScript build metadata
+*.log
+*.tsbuildinfo
+*.gitgnore

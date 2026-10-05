@@ -176,10 +176,11 @@ export function computeLumaAndContrast(luma: Float32Array): { lumaMean: number; 
   return { lumaMean: mean, contrast: Math.sqrt(varSum / n) };
 }
 
-// Sobel edge density and edge map
+// Sobel edge density (% pixels where G > 0.12) and edge map
 export function computeSobelEdges(luma: Float32Array, w = 480, h = 270): { edgeDensity: number; edgeMap: Float32Array } {
   const edgeMap = new Float32Array(w * h);
-  let sum = 0;
+  let count = 0;
+  const EDGE_TH = 0.12;
 
   for (let y = 1; y < h - 1; y++) {
     const yPrev = (y - 1) * w;
@@ -195,11 +196,11 @@ export function computeSobelEdges(luma: Float32Array, w = 480, h = 270): { edgeD
       const gy = -p00 - 2 * p01 - p02 + p20 + 2 * p21 + p22;
       const mag = Math.sqrt(gx * gx + gy * gy) / 4.0;
       edgeMap[yCur + x] = mag;
-      sum += mag;
+      if (mag > EDGE_TH) count++;
     }
   }
 
-  return { edgeDensity: sum / (w * h), edgeMap };
+  return { edgeDensity: count / (w * h), edgeMap };
 }
 
 // Signal and bright non-signal pixel percentage
@@ -246,21 +247,24 @@ export function computeSignalMetrics(frameRGBA: Uint8Array, w = 480, h = 270): {
 }
 
 // Palette class shares (ΔE76 in Lab)
+// Defaults to step=2 (2x2 subsampling, 32.4k pixels) for deterministic, high-throughput estimation
 export function computePaletteShares(
   frameRGBA: Uint8Array,
   palette: PaletteEntry[],
   w = 480,
-  h = 270
+  h = 270,
+  deltaEThreshold = 12.0,
+  step = 2
 ): { shares: Record<string, number>; otherPct: number } {
   const total = w * h;
   const counts: Record<string, number> = {};
   for (const p of palette) counts[p.name] = 0;
   let otherCount = 0;
 
-  // Process pixels (step by 2 in x and y for fast deterministic estimation)
+  // Process pixels (step in x and y for fast deterministic estimation)
   let sampled = 0;
-  for (let y = 0; y < h; y += 2) {
-    for (let x = 0; x < w; x += 2) {
+  for (let y = 0; y < h; y += step) {
+    for (let x = 0; x < w; x += step) {
       sampled++;
       const idx = (y * w + x) * 4;
       const r = frameRGBA[idx]!;
@@ -279,7 +283,7 @@ export function computePaletteShares(
         }
       }
 
-      if (minDe > 12.0) {
+      if (minDe > deltaEThreshold) {
         otherCount++;
       } else {
         counts[closestName] = (counts[closestName] ?? 0) + 1;
@@ -348,8 +352,25 @@ export function computePhaseCorrelationFlow(
   lumaPrev: Float32Array,
   fps = 60,
   w = 480,
-  h = 270
-): { flow_dx: number; flow_dy: number } {
+  h = 270,
+  contrast?: number
+): { flow_dx: number; flow_dy: number; invalid?: boolean } {
+  // Flat-frame guard: if contrast is nearly zero, phase correlation peaks are numerical noise
+  if (contrast !== undefined && contrast < 0.01) {
+    return { flow_dx: 0, flow_dy: 0, invalid: true };
+  }
+  if (contrast === undefined) {
+    let sum = 0;
+    const n = lumaCur.length;
+    for (let i = 0; i < n; i++) sum += lumaCur[i]!;
+    const mean = sum / n;
+    let varSum = 0;
+    for (let i = 0; i < n; i++) { const d = lumaCur[i]! - mean; varSum += d * d; }
+    if (Math.sqrt(varSum / n) < 0.01) {
+      return { flow_dx: 0, flow_dy: 0, invalid: true };
+    }
+  }
+
   const N = FFT_SIZE;
   const r1 = new Float64Array(N * N), i1 = new Float64Array(N * N);
   const r2 = new Float64Array(N * N), i2 = new Float64Array(N * N);
@@ -463,7 +484,7 @@ export function computeShimmer(
   lumaCur: Float32Array,
   lumaNext: Float32Array,
   edgeMap: Float32Array,
-  threshold = 0.15
+  threshold = 0.12
 ): number {
   const n = lumaCur.length;
   let sum = 0;

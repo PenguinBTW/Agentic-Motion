@@ -41,7 +41,7 @@ Comprehensive guides, CLI flags, visual output specifications, and agent remedia
   * Telemetry rule policy: Universal Motion Graphics Rules (`F04–F08`, `F11–F16`) vs. Lyric-Only Rules (`F01–F03`, `F09`, `F10`).
   * Output artifacts catalog (`report.md`, `findings.json`, `summary.json`, `frames.csv`, `text.csv`, `timeline.png`, `slitscan.png`).
 
-### 4. [Engine Architectural Review & Universal Roadmap v2.4.0 (`engine-review-and-roadmap.md`)](./engine-review-and-roadmap.md)
+### 4. [Engine Architectural Review & Universal Roadmap v0.5.0 (`engine-review-and-roadmap.md`)](./engine-review-and-roadmap.md)
 * **Scope**: Historical specification, gap analysis, and 4-milestone roadmap for the engine overhaul (now 100% completed). Refer to [`engine-architecture.md`](./engine-architecture.md) for the active operational documentation.
   * **Module 1**: Continuous $C^2$ Camera Choreography Rig (`CameraRig`: Bishop frames, SQUAD, $O(1)$ arc-length LUT, isometric mode, lens presets).
   * **Module 2**: Universal Transform Hierarchy & Responsive Layout (`TransformNode` & `LayoutNode`: 3D anchors, safe-zone pins, depth scaling).
@@ -56,7 +56,7 @@ Comprehensive guides, CLI flags, visual output specifications, and agent remedia
   * **Module 11**: Directorial Self-Correction Contract (`AgentDirectorLoop` & `agent-heal`: machine-actionable repair directives in `findings.json`).
   * **Module 12**: Declarative Scene Authoring DSL & Strict Lifecycle (`defineScene`, `SceneContext`, `async preload`, font-ready gating).
 
-### 4. [Proposed Diagnostic Instruments Roadmap (`../ideas/`)](../ideas/)
+### 5. [Proposed Diagnostic Instruments Roadmap (`../ideas/`)](../ideas/)
 Architectural specifications and proposals for the next generation of diagnostic instruments (05–09) in [`ideas/`](../ideas/):
 * [**05. Parametric Speed Graph Inspector**](../ideas/05-parametric-motion-curve-speed-graph.md)
 * [**06. Visual Gaze Saliency Heatmap**](../ideas/06-visual-gaze-saliency-attention-heatmap.md)

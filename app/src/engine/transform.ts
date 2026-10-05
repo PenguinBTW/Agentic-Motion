@@ -74,6 +74,16 @@ export class TransformNode {
   }
 
   addChild(child: TransformNode): this {
+    if (child === this) {
+      throw new Error(`Cannot add TransformNode '${this.id}' as a child of itself.`);
+    }
+    let ancestor: TransformNode | null = this;
+    while (ancestor) {
+      if (ancestor === child) {
+        throw new Error(`Cycle detected: cannot add ancestor '${child.id}' as child of '${this.id}'.`);
+      }
+      ancestor = ancestor.parent;
+    }
     if (child.parent) child.parent.removeChild(child);
     child.parent = this;
     this.children.push(child);
@@ -172,6 +182,17 @@ export class LayoutNode extends TransformNode {
     this.pin = pin;
     this.margin = { ...this.margin, ...margin };
     this.markDirty();
+    return this;
+  }
+
+  /**
+   * Fluent alias for setPin and optional layout resolution
+   */
+  pinToViewport(pin: ViewportPin, margin: LayoutMargin = {}, w?: number, h?: number): this {
+    this.setPin(pin, margin);
+    if (w !== undefined && h !== undefined) {
+      this.resolveLayout(w, h);
+    }
     return this;
   }
 

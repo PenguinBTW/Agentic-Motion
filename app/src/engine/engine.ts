@@ -218,7 +218,7 @@ export class Engine {
   private frameFor(e: TimelineEntry, t: number, dt: number, seeked: boolean, preroll: boolean, under: THREE.Texture | null, tin: number, tout: number): Frame {
     const beat = this.audio.beatAt(t), bar = this.audio.barAt(t);
     return {
-      t, dt, lt: t - e.start, p: (t - e.start) / (e.end - e.start), start: e.start, end: e.end, seeked, preroll,
+      t, dt, lt: t - e.start, p: e.end > e.start ? (t - e.start) / (e.end - e.start) : 0, start: e.start, end: e.end, seeked, preroll,
       beat, bar, beatPhase: beat - Math.floor(beat), barPhase: bar - Math.floor(bar),
       a: this.audio.sample(t), under, tin, tout,
     };
