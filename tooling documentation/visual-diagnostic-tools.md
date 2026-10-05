@@ -1,23 +1,40 @@
 # Visual Diagnostic Tools Architecture & User Guide
 
-A modular suite of four high-leverage visual instruments designed to give autonomous AI agents and human reviewers direct **spatial, temporal, and aesthetic sight** into procedural 60 fps WebGL/Canvas2D motion design.
+A modular suite of four high-leverage visual instruments designed to give autonomous AI agents and human art directors direct **spatial, temporal, and aesthetic sight** into procedural 60 fps WebGL/Canvas2D motion design across **any domain**—commercial product reveals, UI/UX interaction showcases, kinetic typography manifestos, procedural data visualizations, brand identity resolves, and audiovisual productions.
 
 ---
 
 ## 1. Core Purpose & Philosophy: Sight Over Numbers
 
-When building procedural 3D motion graphics, automated tools often rely on scalar metrics ($jerk$, optical flow, $\Delta E$, luma). While useful for profiling, scalar numbers fail to answer the core questions of motion craft:
-- *"Does the camera flight feel fluid, or does it hitch on a piecewise spline boundary?"*
-- *"Why did that 3D text disappear? Did it clip out of the frustum or pass behind a wall?"*
-- *"Is our line weight too heavy and aggressive compared to the reference standard?"*
-- *"Does the visual handoff across this scene cut jump awkwardly?"*
+When synthesizing procedural 3D motion graphics, automated tools often rely on scalar metrics ($jerk$, optical flow, $\Delta E$, luma). While useful for profiling, scalar numbers fail to answer the essential questions of motion craft:
+- *"Does this camera trajectory arc smoothly into the product hero shot, or does it hitch on an unblended spline tangent?"*
+- *"Why did that 3D UI card suddenly disappear? Did it penetrate the camera near-clip plane, occlude behind a backplane, or get clipped by the viewport frustum?"*
+- *"Is our stroke weight and bloom too aggressive compared to the client's design tokens and brand guidelines?"*
+- *"Does the visual focal point stay anchored across this scene cut, or does the viewer's eye get violently thrown across the screen?"*
 
-### The Observability Principle
-These four instruments follow the **Instrumentation Over Grading** philosophy:
-1. **Perceptual Diagnosis**: Each tool synthesizes complex temporal, spatial, or multi-scene state into an **interpretable diagnostic image** (`.png`) that an agent or director can evaluate in a single glance.
-2. **Strict Modularity**: All four tools live in isolated modules under `app/scripts/visual/`. The master `render.ts` script only imports them dynamically when invoked, keeping the core engine harness lean.
-3. **Zero Heavy Addon Dependencies**: Built entirely on Bun, TypeScript, Playwright canvas readbacks, and HTML5 Canvas2D/WebGL blending modes. No native C++ canvas bindings required.
-4. **Sub-6-Second Turnaround**: Each tool executes headless in 2–6 seconds, allowing rapid visual feedback loops during agent development.
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       THE OBSERVABILITY PRINCIPLE                           │
+│                                                                             │
+│   SCALAR METRICS ALONE                   VISUAL INSTRUMENTATION             │
+│   ┌───────────────────────────┐          ┌───────────────────────────┐      │
+│   │ jerk = 142.8 m/s³         │          │ [ 3D God-View Blueprint ] │      │
+│   │ optical_flow = 18.2 px/s  │  ──────► │ [ Motion Onion Trail    ] │      │
+│   │ edge_density = 0.041      │          │ [ Split-Wipe A/B Anchor ] │      │
+│   │ delta_e = 8.4             │          │ [ Seam Stitch Overlay   ] │      │
+│   └───────────────────────────┘          └───────────────────────────┘      │
+│   Blind to spatial geometry,             Provides instantaneous spatial,    │
+│   easing rhythm, & aesthetic             temporal, and physical context in  │
+│   intent. Fails on intentional           a single, model-inspectable image. │
+│   snaps and spring dynamics.                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### The Four Pillars of Instrument Design
+1. **Perceptual Diagnosis**: Each tool collapses complex multi-frame, spatial, or multi-scene state into an **interpretable diagnostic image** (`.png`) that an AI vision model or human director can evaluate in a single glance.
+2. **Strict Modularity**: All four tools live in isolated modules under `app/scripts/visual/`. The master `render.ts` script only imports them dynamically when invoked, keeping the core engine harness completely lean.
+3. **Zero Native C++ Dependencies**: Built entirely on Bun, TypeScript, Playwright canvas readbacks, and HTML5 Canvas2D/WebGL blending modes. No native graphics compilation required.
+4. **Sub-6-Second Turnaround**: Each tool executes headless in 2–6 seconds, enabling rapid closed-loop iteration during autonomous agent coding cycles.
 
 ---
 
@@ -28,52 +45,63 @@ These four instruments follow the **Instrumentation Over Grading** philosophy:
 * **Implementation**: [`app/scripts/visual/onion.ts`](../app/scripts/visual/onion.ts)
 * **Core Artifacts**: `onion_motion.png`, `onion_summary.json`
 
-The **Multi-Exposure Motion Onion** collapses a $0.5\text{–}1.5\,\text{s}$ animation window into a **single composite diagnostic still**. It blends 8–16 consecutive frames using a **chromatic time-decay gradient**:
-* **Past Frames ($t < t_{\text{mid}}$)**: Tinted in cool cyan/blue (`#00D2FF`) with ascending opacity ($20\% \to 70\%$).
+The **Multi-Exposure Motion Onion** collapses an animation window ($0.5\text{–}1.5\,\text{s}$) into a **single composite diagnostic still**. It blends 8–16 consecutive frames using a **chromatic time-decay gradient**:
+* **Past Frames ($t < t_{\text{mid}}$)**: Tinted in cool cyan/blue (`#00D2FF`) with ascending opacity ($15\% \to 60\%$).
 * **Key Center Frame ($t = t_{\text{mid}}$)**: Rendered in **full natural contrast and color** ($100\%$ opacity).
-* **Future Frames ($t > t_{\text{mid}}$)**: Tinted in warm amber/signal orange (`#FF7A00`) with decaying opacity ($70\% \to 20\%$).
+* **Future Frames ($t > t_{\text{mid}}$)**: Tinted in warm amber/signal orange (`#FF7A00`) with descending opacity ($60\% \to 15\%$).
 
 ```
-TEMPORAL ONION-SKIN SCHEMATIC (Single Composite Image)
+TEMPORAL ONION-SKIN SCHEMATIC (Single Composite Diagnostic Image)
 
-[Past: t - 0.20s]     [t - 0.10s]     [Current: t = 0]     [t + 0.10s]     [Future: t + 0.20s]
-   Faint Cyan          Cool Blue         Bright White         Warm Amber       Saturated Orange
+[Past: t - 0.20s]     [t - 0.10s]     [Center: t = 0]      [t + 0.10s]     [Future: t + 0.20s]
+   Faint Cyan          Cool Blue         Natural Color        Warm Amber       Saturated Orange
        ○                   ○                  ●                   ○                   ○
         \                   \                 │                  /                   /
     ┌──────────┐        ┌──────────┐    ┌──────────┐     ┌──────────┐        ┌──────────┐
-    │  "WORD"  │        │  "WORD"  │    │  "WORD"  │     │  "WORD"  │        │  "WORD"  │
+    │ HERO OBJ │        │ HERO OBJ │    │ HERO OBJ │     │ HERO OBJ │        │ HERO OBJ │
     └──────────┘        └──────────┘    └──────────┘     └──────────┘        └──────────┘
-       (20% α)             (50% α)         (100% α)         (50% α)             (20% α)
+       (15% α)             (45% α)         (100% α)         (45% α)             (15% α)
 
-<--- Monotonic Spacing (Even gaps = continuous C1 flight)                                    --->
-<--- Clumped Ghost Echoes Followed by Wide Gaps = Piecewise Jolt / Acceleration Break        --->
+<--- Monotonic Spacing (Even progression = smooth C1 deceleration or fluid spring motion)    --->
+<--- Clumped Ghost Echoes Followed by Wide Gaps = Spline Hitch / Tangent Discontinuity        --->
 ```
 
-### What It Reveals
-1. **Camera Tremors & Jitter**: A continuous $C^1$ cinema flight produces smooth, progressively spaced ghost echoes. High-frequency micro-tremors immediately show up as fuzzy, jagged double-edges.
-2. **Piecewise Easing Discontinuities**: If a camera spline has a math error where acceleration drops abruptly to zero, the ghost echoes bunch up tightly in a clump and then suddenly leap across a wide gap.
-3. **Typographic Entrance Pops**: If a lyric word pops into existence without easing, there are zero preceding cyan echoes; if it decelerates smoothly to a rest stop, the amber echoes compress proportionally.
-4. **Centroid Vector Trail**: Connects the centroid of the hero typography across all sampled frames with node dots, graphing inter-frame pixel displacement $\Delta d$.
+### Universal Motion Design Applications
+1. **UI/UX Micro-Interactions & Spring Dynamics**:
+   - Inspecting sheet reveals, card swipes, modal expansions, and spring bouncers ($m, k, c$).
+   - A properly damped spring reveals a characteristic decaying oscillation in amber echoes; an underdamped spring reveals excessive ringing; an overdamped spring shows sluggish clumped echoes.
+2. **Kinetic Typography & Display Manifestos**:
+   - Diagnosing title entrances, tracking expansions, and numerical counter rolls.
+   - If a headline pops into existence without easing, there are zero cyan echoes; if it smoothly decelerates to a reading rest, the amber echoes compress proportionally.
+3. **3D Product & Commercial Camera Moves**:
+   - Inspecting camera orbits, fly-throughs, and crane dives.
+   - Smooth continuous splines produce evenly spaced ghost silhouettes of the product. High-frequency micro-tremors immediately show up as fuzzy, jagged double-edges.
+4. **Vector Logo & Brand Icon Morphs**:
+   - Tracing shape transitions and path morphing between geometric icons.
+   - Instantly exposes whether control points interpolate along natural arcs or deform unnaturally.
 
 ### CLI Options
 
 | Option | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `--t` | float (s) | `10.0` | Center timestamp for symmetric temporal window. |
+| `--t` | float (s) | `10.0` | Center timestamp for symmetric temporal inspection window. |
 | `--window` | float (s) | `0.5` | Total duration of time window to collapse (s). |
 | `--from` | float (s) | `t - window/2` | Explicit start timestamp (overrides `--window`). |
 | `--to` | float (s) | `t + window/2` | Explicit end timestamp (overrides `--window`). |
 | `--frames` | integer | `10` | Number of exposure slices to composite (range: 4–20). |
 | `--scene` | string | `all` | Specific scene or plate ID to load. |
-| `--out` | file path | `../out/visual/onion` | Target output directory for PNG and JSON. |
+| `--out` | file path | `../out/visual/onion` | Target output directory for PNG and JSON telemetry. |
 
 ### Example Invocations
 ```bash
-# Inspect camera easing across a 0.5s phrase in boundary scene
-bun scripts/onion.ts --scene boundary --t 26.50 --frames 12 --out ../out/visual/boundary_ease
+# Audit UI card spring-damper deceleration across a 0.5s window
+bun scripts/onion.ts --scene modal_reveal --t 2.40 --frames 12 --out ../out/visual/modal_spring
 
-# Trace a 1.0s hero word trajectory in hook scene
-bun scripts/render.ts onion --scene hook1 --from 34.00 --to 35.00 --frames 16 --out ../out/visual/hook_dive
+# Trace a 1.0s hero 3D camera crane move in a commercial product reveal
+bun scripts/render.ts onion --scene hero_product --from 14.00 --to 15.00 --frames 16 --out ../out/visual/product_crane
+
+# Inspect kinetic title deceleration in a brand manifesto sequence
+bun scripts/onion.ts --scene title_intro --t 0.85 --window 0.6 --frames 10 --out ../out/visual/title_ease
 ```
 
 ---
@@ -85,56 +113,71 @@ bun scripts/render.ts onion --scene hook1 --from 34.00 --to 35.00 --frames 16 --
 * **Implementation**: [`app/scripts/visual/godview.ts`](../app/scripts/visual/godview.ts)
 * **Core Artifacts**: `cam_godview.png`, `godview_summary.json`
 
-The **3D God-View Camera Blueprint** generates an **external orthographic architectural schematic** of the scene rendered from outside the cinema lens. It presents two simultaneous technical projections:
-* **Panel 1: Top-Down Blueprint ($XZ$ Plane)**: Shows the world ground grid ($5\text{m}$ metric intervals), physical corridor walls ($\pm 1.8\text{m}$), door notches ($2.2\text{m}$ spacing), the continuous camera flight ribbon colored by velocity, and camera viewing frustum cones every $0.5\text{s}$.
-* **Panel 2: Side Elevation ($YZ$ Plane)**: Shows floor ($y = 0$) and ceiling/lintel ($y = 2.2\text{m}$) bounds, camera altitude profile $y(t)$, and pitch angles.
+The **3D God-View Camera Blueprint** generates an **external orthographic architectural schematic** of the scene rendered from outside the active cinema lens. It provides two simultaneous technical projections:
+* **Panel 1: Top-Down Blueprint ($XZ$ Plane)**: Shows the world ground grid ($5\text{m}$ metric intervals), physical scene geometry, obstacle boundaries, hero subject anchor, the continuous camera flight ribbon colored by physical velocity, and viewing frustum cones sampled every $0.5\text{s}$.
+* **Panel 2: Side Elevation ($YZ$ Plane)**: Shows floor ($y = 0$), vertical ceiling/bounds, camera altitude profile $y(t)$, tilt/pitch angles, and near/far clipping thresholds.
 
 ```
 TOP-DOWN ARCHITECTURAL BLUEPRINT (XZ PLANE)
- ◄ LEFT WALL (x = -1.8m)                    RIGHT WALL (x = +1.8m) ►
-┌──────────────────────────────────────────────────────────────────┐
-│  │                                                            │  │
-│  ├──[Door Notch]                                [Door Notch]──┤  │
-│  │                                                            │  │
-│  │                        ▲  t = 12.0s                        │  │
-│  │                       ╱ ╲   Frustum Cone                   │  │
-│  │                      ╱   ╲  (Viewing axis & FOV)           │  │
-│  │                     ───────                                │  │
-│  │                        │                                   │  │
-│  │                        │  Camera Flight Ribbon             │  │
-│  │                        │  (Signal Orange = Speed 22 m/s)   │  │
-│  │                         \                                  │  │
-│  │                          \  t = 10.0s (Smooth 15° Arc)     │  │
-│  │                           \                                │  │
-│  │                            │  (Deep Blue = Speed 4 m/s)    │  │
-│  │                            │                               │  │
-│  ├──[Door Notch]              ●  t = 8.0s       [Door Notch]──┤  │
-│  │                                                            │  │
-└──────────────────────────────────────────────────────────────────┘
+ ◄ LEFT STAGE BOUNDARY (x = -4.0m)             RIGHT STAGE BOUNDARY (x = +4.0m) ►
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  │                                                                        │  │
+│  │                      [ 3D HERO PRODUCT / UI ANCHOR ]                   │  │
+│  │                               (x=0, z=18.0m)                           │  │
+│  │                               ┌─────────────┐                          │  │
+│  │                               │  HERO MESH  │                          │  │
+│  │                               └─────────────┘                          │  │
+│  │                                      ▲                                 │  │
+│  │                                     ╱ ╲   t = 12.0s                    │  │
+│  │                                    ╱   ╲  Frustum Cone                 │  │
+│  │                                   ─────── (Target Gaze Axis)           │  │
+│  │                                      │                                 │  │
+│  │                                      │  Camera Flight Ribbon           │  │
+│  │                                      │  (Signal Orange = Speed 18 m/s) │  │
+│  │                                     /                                  │  │
+│  │                                    /  t = 10.0s (Smooth 30° Arc)       │  │
+│  │                                   /                                    │  │
+│  │                                  │  (Deep Blue = Speed 3 m/s)          │  │
+│  │                                  │                                     │  │
+│  │                                  ●  t = 8.0s (Orchestrated Rest)       │  │
+│  │                                                                        │  │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### What It Reveals
-1. **Frustum & Geometry Clipping**: When looking through the first-person camera, if an object pops out of nowhere, you cannot tell where it came from. The God-View shows you immediately: *"The camera is orbiting $12\,\text{cm}$ from the left corridor wall,"* or *"The text was spawned behind the near clip plane."*
-2. **Flight Path Spline Health**: You see the physical flight path through world space. Sudden sharp 90-degree kinks, unwanted reversals along $Z$, or collision courses stand out clearly.
-3. **Altitude & Ground Proximity**: Panel 2 reveals whether camera dives dip dangerously into the floor or breach the ceiling.
+### Universal Motion Design Applications
+1. **Commercial Product Reveals & Turntables**:
+   - Orchestrating multi-axis camera orbits around watches, smartphones, automotive chassis, or architectural models.
+   - God-View exposes the exact orbit radius, preventing the camera from clipping into geometry or swinging too far from the focal subject.
+2. **Isometric & Layered UI Presentations**:
+   - Inspecting 3D exploded views of UI application layers (cards floating on $Z$-planes).
+   - Verifies that camera flight paths do not penetrate intermediate UI floating planes or induce extreme perspective distortion.
+3. **Architectural & Spatial Fly-Throughs**:
+   - Navigating through rooms, corridors, or abstract geometric stages.
+   - Highlights spatial clearances, wall proximity ($< 0.2\text{m}$ alerts), and frustum near-plane breaches before objects awkwardly pop into view.
+4. **Data Visualization Stages**:
+   - Sweeping across 3D bar graphs, geographic terrain maps, or network graph clusters.
+   - Confirms that the camera flight remains smooth and oriented toward active data clusters.
 
 ### CLI Options
 
 | Option | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `--from` | float (s) | timeline start | Start of the camera path in song seconds. |
-| `--to` | float (s) | timeline end | End of the camera path in song seconds. |
+| `--from` | float (s) | timeline start | Start of the camera path in timeline seconds. |
+| `--to` | float (s) | timeline end | End of the camera path in timeline seconds. |
 | `--samples` | integer | `24` | Number of discrete camera positions and frustum cones to sample. |
 | `--scene` | string | `all` | Target scene or plate ID to inspect. |
-| `--out` | file path | `../out/visual/godview` | Output directory for blueprint image and JSON. |
+| `--out` | file path | `../out/visual/godview` | Output directory for blueprint image and telemetry JSON. |
 
 ### Example Invocations
 ```bash
-# Render the entire doors corridor flight path (8.0 to 18.5s)
-bun scripts/godview.ts --from 8.0 --to 18.5 --samples 24 --out ../out/visual/doors_godview
+# Inspect a 3D product turntable camera orbit (4.0s to 12.0s)
+bun scripts/godview.ts --scene product_turntable --from 4.0 --to 12.0 --samples 32 --out ../out/visual/product_orbit
 
-# Inspect the 3D canyon flight in boundary scene
-bun scripts/render.ts godview --scene boundary --from 25.6 --to 34.0 --samples 30
+# Audit an architectural camera fly-through across an entire sequence
+bun scripts/render.ts godview --scene building_walk --from 0.0 --to 20.0 --samples 40 --out ../out/visual/arch_flythrough
+
+# Verify camera clearances in an exploded 3D UI scene
+bun scripts/godview.ts --scene ui_explode --from 2.5 --to 8.0 --samples 20 --out ../out/visual/ui_clearances
 ```
 
 ---
@@ -146,53 +189,62 @@ bun scripts/render.ts godview --scene boundary --from 25.6 --to 34.0 --samples 3
 * **Implementation**: [`app/scripts/visual/compare.ts`](../app/scripts/visual/compare.ts)
 * **Core Artifacts**: `ab_side_by_side.png`, `ab_split_wipe.png`, `ab_comparison.json`
 
-The **Visual A/B Reference Anchor** pairs a frame from the active scene directly against the corresponding benchmark plate from `Example project` at matching 1080p resolution.
+The **Visual A/B Reference Anchor** pairs a frame from the active scene directly against an authoritative reference plate—such as a Figma mockup, client brand guideline benchmark, or reference production plate—at matching 1080p resolution.
 
-If the Example project dev server is not running, `compare.ts` automatically spawns a private ephemeral Vite instance on port `5189`, captures the exact reference plate at `--ref-t`, and generates two composite artifacts:
-1. **Side-by-Side Plate (`ab_side_by_side.png`)**: Two 16:9 panels placed side-by-side with cyan (`[ACTIVE]`) and signal orange (`[EXAMPLE BENCHMARK]`) borders and timestamp labels.
-2. **50/50 Diagonal Split Wipe (`ab_split_wipe.png`)**: A $45^\circ$ diagonal hairline cut across the frame. Top-left is the active project; bottom-right is the Example project benchmark.
+If the reference server is not running, `compare.ts` automatically spawns a private ephemeral Vite instance on port `5189`, captures the exact reference plate at `--ref-t`, and generates two composite artifacts:
+1. **Side-by-Side Plate (`ab_side_by_side.png`)**: Two 16:9 panels placed side-by-side with cyan (`[ACTIVE SCENE]`) and signal orange (`[REFERENCE BENCHMARK]`) borders and parameter annotations.
+2. **50/50 Diagonal Split Wipe (`ab_split_wipe.png`)**: A $45^\circ$ diagonal hairline cut across the frame. Top-left is the active scene; bottom-right is the reference benchmark.
 
 ```
 DIAGONAL 50/50 SPLIT WIPE SCHEMATIC (ab_split_wipe.png)
 ┌─────────────────────────────────────────────────────────────┐
-│ ▲ ACTIVE: boundary.ts (t = 27.5s)       \                   │
-│                                          \                  │
-│   Word: "BOUNDARY"                        \                 │
-│   Line width: 2.8px                        \                │
-│                                             \  45° Hairline │
-│                                              \   Split Line │
+│ ▲ ACTIVE SCENE (Top-Left)               \                   │
+│   Title Height: 68px                     \                  │
+│   Stroke Weight: 2.5px                    \                 │
+│   Negative Space: 42%                      \  45° Hairline  │
+│                                             \   Split Cut   │
+│                                              \              │
 │                                               \             │
-│                                                \            │
-│                 ▼ EXAMPLE REF: loss.ts (t = 14.2s)          │
-│                   Word: "LOSS"                              │
-│                   Line width: 1.0px                         │
-│                   Negative space: 72%                       │
+│                 ▼ REFERENCE BENCHMARK          \            │
+│                   Title Height: 36px            \           │
+│                   Stroke Weight: 1.0px           \          │
+│                   Negative Space: 72%             \         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### What It Reveals
-1. **Typographic Scale Discrepancies**: Immediately shows whether your active scene's font is twice the size of the reference standard.
-2. **Line Weight & Contrast**: Reveals whether your 3D wireframes are delicate 1px semi-transparent lines or thick, over-bloomed glowing chalk.
-3. **Negative Space Discipline**: Visually exposes whether the composition is crowded against the borders or maintains the spacious negative field of the Example project.
+### Universal Motion Design Applications
+1. **Brand Identity & Design System Calibration**:
+   - Verifying that rendered typography cap heights, letter spacing, and line weights strictly match design token specifications.
+   - Highlights accidental font scaling, blown-out glows, or bloated stroke thicknesses.
+2. **Figma / Concept Art Parity Audits**:
+   - Benchmarking active procedural WebGL scenes against exported high-fidelity Figma keyframe artboards.
+   - Instantly exposes composition drifting, improper vertical alignment, or incorrect color grading.
+3. **Commercial Aesthetic Restraint Verification**:
+   - Ensures procedural motion retains premium negative space (e.g. $60\%\text{–}75\%$ breathing room) rather than over-filling the viewport with cluttered decorative lines.
+4. **Color Palette & Exposure Alignment**:
+   - The diagonal split wipe directly juxtaposes background tones and lighting across the $45^\circ$ boundary. Any disparity in black point, white point, or saturation stands out clearly.
 
 ### CLI Options
 
 | Option | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `--scene` | string | `boundary` | Active scene name in the current project. |
-| `--t` | float (s) | `27.50` | Timestamp in current scene. |
-| `--ref` | string | `loss` | Reference scene plate in `Example project/app`. |
-| `--ref-t` | float (s) | `14.20` | Matching timestamp in reference project. |
-| `--port` | integer | `5189` | Port for ephemeral reference Vite instance. |
+| `--scene` | string | active | Active scene or plate name in the current project. |
+| `--t` | float (s) | `10.0` | Timestamp in current scene. |
+| `--ref` | string | benchmark | Reference scene plate or benchmark asset name. |
+| `--ref-t` | float (s) | matching | Matching timestamp in reference benchmark. |
+| `--port` | integer | `5189` | Port for ephemeral reference server instance. |
 | `--out` | file path | `../out/visual/compare` | Output directory for contact plates. |
 
 ### Example Invocations
 ```bash
-# Compare boundary typography against Example loss scene
-bun scripts/compare.ts --scene boundary --t 27.5 --ref loss --ref-t 14.2 --out ../out/visual/boundary_vs_loss
+# Compare active UI showcase frame against design benchmark
+bun scripts/compare.ts --scene dashboard_hud --t 5.20 --ref figma_keyframe --ref-t 5.20 --out ../out/visual/hud_vs_figma
 
-# Compare hook drop against Example hook drop
-bun scripts/render.ts compare --scene hook1 --t 34.5 --ref hook --ref-t 22.5 --out ../out/visual/hook_vs_benchmark
+# Benchmark active 3D commercial typography against master design tokens
+bun scripts/render.ts compare --scene brand_reveal --t 3.50 --ref style_guide --ref-t 1.00 --out ../out/visual/brand_alignment
+
+# Compare lighting and negative space against approved reference scene
+bun scripts/compare.ts --scene feature_callout --t 12.0 --ref master_template --ref-t 12.0
 ```
 
 ---
@@ -204,7 +256,7 @@ bun scripts/render.ts compare --scene hook1 --t 34.5 --ref hook --ref-t 22.5 --o
 * **Implementation**: [`app/scripts/visual/stitch.ts`](../app/scripts/visual/stitch.ts)
 * **Core Artifacts**: `onion_seam.png`, `strip_seam.png`, `stitch_summary.json`
 
-The **Transition Seam Stitch Inspector** audits the exact boundary where one scene cuts into the next ($\pm 250\,\text{ms}$). It produces two diagnostic images:
+The **Transition Seam Stitch Inspector** audits the exact boundary where one scene cuts, wipes, or morphs into the next ($\pm 250\,\text{ms}$). It produces two diagnostic images:
 1. **Split-Wipe Onion Overlay (`onion_seam.png`)**: Composites exit frame $N-1$ in translucent green (`#00FF66`, $\alpha = 0.5$) directly over entry frame $N$ in translucent magenta (`#FF00AA`, $\alpha = 0.5$).
    * Wherever carrier geometry lines up across the cut, green + magenta light combine into **neutral white/gray**.
    * Any spatial jump, scale mismatch, or horizon tilt immediately creates **bright green or magenta fringing**.
@@ -224,28 +276,38 @@ SEAM ONION OVERLAY CONCEPT (FRAME N-1 vs FRAME N)
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### What It Reveals
-1. **Carrier Teleportation**: If a doorway or portal carrier ends at screen center in Scene A, but the incoming scene spawns it $60\,\text{px}$ to the left, the green and magenta fringes jump out immediately.
-2. **Horizon & Angle Shifts**: Catches accidental camera roll or vanishing point dislocations across match cuts.
-3. **Dropout Frames**: Instantly flags if a scene accidentally fades to black or collapses its line buffers a few frames before the official cut timestamp.
+### Universal Motion Design Applications
+1. **Commercial Match-Cuts & Graphic Transitions**:
+   - Auditing match-cuts where a geometric shape, product silhouette, or hero title carries over from Scene A into Scene B.
+   - Instantly exposes whether the focal carrier shifted by $10\,\text{px}$ or scaled improperly across the boundary.
+2. **UI State Handoffs & Modal Push/Pop**:
+   - Inspecting seamless transitions where a UI card expands into a full-screen view.
+   - Highlights anchor misalignment, sudden scale pops, or dropped frames during the handoff.
+3. **Camera Trajectory Vector Continuity**:
+   - The 10-frame filmstrip reveals whether camera velocity carries smoothly through the transition or freezes dead on frame $N-1$ before jumping on frame $N$.
+4. **Blackout / Whiteout Dropout Detection**:
+   - Catches unintentional 1-frame blank blackouts or canvas buffer clearing glitches occurring immediately prior to scene initialization.
 
 ### CLI Options
 
 | Option | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `--t` | float (s) | auto | Cut timestamp in song seconds (auto-detected from timeline if omitted). |
-| `--from-scene` | string | auto | Outgoing scene name. |
-| `--to-scene` | string | auto | Incoming scene name. |
-| `--window` | float (s) | `0.25` | Inspection window radius in seconds ($\pm 15$ frames at 60fps). |
+| `--t` | float (s) | auto | Cut timestamp in timeline seconds (auto-detected if omitted). |
+| `--from-scene` | string | auto | Outgoing scene or plate ID. |
+| `--to-scene` | string | auto | Incoming scene or plate ID. |
+| `--window` | float (s) | `0.25` | Inspection window radius in seconds ($\pm 15$ frames at 60 fps). |
 | `--out` | file path | `../out/visual/stitch` | Output directory for onion overlay and filmstrip. |
 
 ### Example Invocations
 ```bash
-# Audit the handoff cut between doors and boundary at t = 25.60s
-bun scripts/stitch.ts --t 25.60 --out ../out/visual/doors_to_boundary
+# Audit the match-cut between product macro shot and wide showcase at t = 6.40s
+bun scripts/stitch.ts --from-scene macro_shot --to-scene wide_reveal --t 6.40 --out ../out/visual/macro_to_wide
 
-# Audit the boundary to hook drop cut
-bun scripts/render.ts stitch --from-scene boundary --to-scene hook1 --t 34.00
+# Audit a UI card-to-fullscreen modal expansion seam
+bun scripts/render.ts stitch --from-scene feed_card --to-scene modal_detail --t 3.25
+
+# Inspect transition seam between two commercial chapters
+bun scripts/stitch.ts --from-scene chapter_1 --to-scene chapter_2 --t 15.00
 ```
 
 ---
@@ -256,7 +318,7 @@ All four instruments share a clean, zero-bloat architecture:
 
 ```
 Agentic motion design toolset/
-├── scripts/                          # Lightweight forwarders (~13 lines each)
+├── scripts/                          # Lightweight CLI forwarders (~13 lines each)
 │   ├── render.ts                     # Master CLI dispatcher
 │   ├── onion.ts                      # Direct CLI -> app/scripts/render.ts onion
 │   ├── godview.ts                    # Direct CLI -> app/scripts/render.ts godview
@@ -264,7 +326,7 @@ Agentic motion design toolset/
 │   └── stitch.ts                     # Direct CLI -> app/scripts/render.ts stitch
 │
 └── app/scripts/
-    ├── render.ts                     # Dynamic import dispatcher (12 lines added)
+    ├── render.ts                     # Dynamic import dispatcher (zero boot bloat)
     └── visual/                       # Self-contained tool logic
         ├── onion.ts                  # Multi-exposure chromatic blending
         ├── godview.ts                # Orthographic blueprint & frustum rendering
@@ -273,7 +335,7 @@ Agentic motion design toolset/
 ```
 
 ### Dynamic Import Dispatcher (`app/scripts/render.ts`)
-The main renderer does not load or evaluate any visual tool module unless the subcommand is explicitly invoked:
+The main renderer does not evaluate or import visual tool modules unless their specific command is invoked:
 ```typescript
 } else if (mode === 'onion') {
   const { runOnion } = await import('./visual/onion');
@@ -294,37 +356,37 @@ The main renderer does not load or evaluate any visual tool module unless the su
 
 ## 7. Recommended Agent Workflow Decision Tree
 
-When building, debugging, or reviewing procedural scenes, autonomous agents should follow this diagnostic sequence:
+When building, debugging, or reviewing procedural motion design scenes, autonomous agents should follow this diagnostic sequence:
 
 ```
                                   [ AGENT TASK ]
-                                        │
-             ┌──────────────────────────┼──────────────────────────┐
-             ▼                          ▼                          ▼
-   [ New 3D Scene / Layout ]    [ Tuning Motion & Easing ]  [ Reviewing Scene Cut ]
-             │                          │                          │
-             ▼                          ▼                          ▼
-      bun scripts/godview.ts      bun scripts/onion.ts       bun scripts/stitch.ts
-      • Check 3D clearances       • Check ghost spacing      • Check carrier alignment
-      • Verify frustum cone       • Spot piecewise jerks     • Spot horizon tilt jumps
-      • Inspect flight ribbon     • Verify ease-in/out       • Confirm zero blackouts
-             │                          │                          │
-             └──────────────────────────┼──────────────────────────┘
-                                        │
-                                        ▼
-                           [ Aesthetic Calibration ]
-                                        │
-                                        ▼
-                             bun scripts/compare.ts
-                             • Compare font height & weight
-                             • Verify negative space (60-75%)
-                             • Check line density against Example
-                                        │
-                                        ▼
-                           [ Final Verification Audit ]
-                                        │
-                                        ▼
-                             bun scripts/render.ts motion
-                             • Verify 0 blocking flags in findings.json
-                             • Verify lyric sync & luma within range
+                                         │
+              ┌──────────────────────────┼──────────────────────────┐
+              ▼                          ▼                          ▼
+    [ 3D Scene / Spatial Layout ] [ Easing, Springs & Motion ] [ Scene Cuts & Handoffs ]
+              │                          │                          │
+              ▼                          ▼                          ▼
+       bun scripts/godview.ts      bun scripts/onion.ts       bun scripts/stitch.ts
+       • Inspect 3D clearances    • Check ghost spacing      • Check carrier alignment
+       • Verify frustum cone      • Spot spline hitches      • Spot horizon tilt jumps
+       • Audit flight ribbon      • Verify spring damping    • Catch blank frame drops
+              │                          │                          │
+              └──────────────────────────┼──────────────────────────┘
+                                         │
+                                         ▼
+                            [ Aesthetic Calibration ]
+                                         │
+                                         ▼
+                              bun scripts/compare.ts
+                              • Compare typography height & weight
+                              • Verify negative space (60-75%)
+                              • Check line density against design tokens
+                                         │
+                                         ▼
+                            [ Final Verification Audit ]
+                                         │
+                                         ▼
+                              bun scripts/render.ts motion
+                              • Verify 0 blocking flags in findings.json
+                              • Verify dwell times, safe margins & palette
 ```
