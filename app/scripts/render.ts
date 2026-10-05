@@ -731,6 +731,18 @@ try {
     await video(page, +opt('from', '0')!, +opt('to', String(dur))!, +opt('fps', '60')!, path.resolve(opt('out', path.join(ROOT, 'out/whos-holding-on-to-who.mp4'))!));
   } else if (mode === 'motion') {
     await motion(page);
+  } else if (mode === 'onion') {
+    const { runOnion } = await import('./visual/onion');
+    await runOnion(page, process.argv.slice(3));
+  } else if (mode === 'stitch') {
+    const { runStitch } = await import('./visual/stitch');
+    await runStitch(page, process.argv.slice(3));
+  } else if (mode === 'compare') {
+    const { runCompare } = await import('./visual/compare');
+    await runCompare(page, process.argv.slice(3));
+  } else if (mode === 'godview') {
+    const { runGodView } = await import('./visual/godview');
+    await runGodView(page, process.argv.slice(3));
   }
   if (logs.length) console.error('BROWSER LOG:\n' + logs.slice(0, 40).join('\n'));
 } finally {
