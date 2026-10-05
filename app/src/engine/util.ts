@@ -137,7 +137,8 @@ export function keys(t: number, ks: Key[]): number {
     const k = ks[i]!;
     if (t <= k[0]) {
       const p = ks[i - 1]!;
-      const u = (t - p[0]) / (k[0] - p[0]);
+      const span = k[0] - p[0];
+      const u = span === 0 ? (t <= p[0] ? 0 : 1) : (t - p[0]) / span;
       return lerp(p[1], k[1], (k[2] ?? ease.inOutCubic)(u));
     }
   }

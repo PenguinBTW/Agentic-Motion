@@ -127,12 +127,16 @@ export class CompositorGraph {
    */
   evaluate(renderer: THREE.WebGLRenderer, finalTarget: THREE.WebGLRenderTarget): void {
     if (this.layers.length === 0) return;
+    // NOTE: l.post (ScopedPostOpts) is accepted but not yet implemented — scoped
+    // post isolation is a no-op in v0.5. Do not rely on per-layer post.
+    // Preserve transparent-black clear for alpha delivery (WebM-alpha / ProRes4444).
 
     // 1. Render all base layers into their allocated targets
     for (const l of this.layers) {
       const rt = this.getRT(l.name);
       const prevRT = renderer.getRenderTarget();
       renderer.setRenderTarget(rt);
+      renderer.setClearColor(0x000000, 0);
       renderer.clear(true, true, true);
       l.render(rt);
       renderer.setRenderTarget(prevRT);
@@ -143,8 +147,9 @@ export class CompositorGraph {
     const tempAccumB = this.getRT('__accum_b');
     const tempMatted = this.getRT('__matted');
 
-    // Clear accumulator A
+    // Clear accumulator A (transparent black for alpha delivery)
     renderer.setRenderTarget(tempAccumA);
+    renderer.setClearColor(0x000000, 0);
     renderer.clear(true, true, true);
 
     let currentAccum = tempAccumA;

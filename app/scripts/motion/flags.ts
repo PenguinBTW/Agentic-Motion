@@ -11,6 +11,7 @@ import {
   type Severity,
 } from './config';
 import type { TextAnalysisResult } from './text-analyzer';
+import { normalizeText } from './text-analyzer';
 
 export interface CutItem {
   t: number;
@@ -211,7 +212,7 @@ export function evaluateFlags(
   }
 
   for (const r of textAnalysis.runs) {
-    const isLyric = textAnalysis.words.some((w) => w.word.toLowerCase() === r.rawText.toLowerCase());
+    const isLyric = textAnalysis.words.some((w) => normalizeText(w.word) === r.normalizedText);
     if (isLyric) continue;
     // World text moving through camera frustum is not a static layout clipping error
     if (r.travel_px_s >= 50.0) continue;
@@ -491,7 +492,9 @@ export function evaluateFlags(
   // -------------------------------------------------------------
 
   // F14: adaptive sampler reached max spp of Example project (or CONFIG default)
-  const calF14 = (calibration?.samplerMaxSpp && calibration.samplerMaxSpp.n > 0) ? calibration.samplerMaxSpp : null;
+  // Ignore degenerate calibration (max<=1 means calibrator never sampled adaptively).
+  const calF14Raw = (calibration?.samplerMaxSpp && calibration.samplerMaxSpp.n > 0) ? calibration.samplerMaxSpp : null;
+  const calF14 = calF14Raw && calF14Raw.max > 1 ? calF14Raw : null;
   const threshF14 = calF14 ? calF14.max : CONFIG.sampler_max_spp;
   const isCalF14 = Boolean(calF14);
   let sppStart = -1, maxRunSpp = 0;

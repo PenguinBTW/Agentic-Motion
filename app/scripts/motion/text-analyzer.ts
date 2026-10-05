@@ -132,8 +132,11 @@ export function analyzeTextProbes(
       }
     }
 
-    // Retire inactive runs
+    // Retire inactive runs — only if gap exceeds tolerance (fIdx > last+2),
+    // so a 1-2 frame probe dropout does not split the run.
     for (const ar of remainingActive) {
+      const lastRec = ar.records[ar.records.length - 1]!;
+      if (fIdx <= lastRec.frameIdx + 2) continue;
       const idx = activeRuns.indexOf(ar);
       if (idx >= 0) activeRuns.splice(idx, 1);
     }

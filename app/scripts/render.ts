@@ -215,13 +215,17 @@ async function video(page: Page, from: number, to: number, fps: number, out: str
 }
 
 async function motion(page: Page) {
-  const from = +opt('from', '0')!;
-  const to = +opt('to', '10')!;
+  let from = +opt('from', '0')!;
+  let to = +opt('to', '10')!;
+  if (!Number.isFinite(from) || from < 0) { console.warn(`[motion] Invalid --from, defaulting to 0`); from = 0; }
+  if (!Number.isFinite(to) || to < 0) { console.warn(`[motion] Invalid --to, defaulting to 10`); to = 10; }
+  if (to <= from) { console.warn(`[motion] Empty window (to<=from), expanding to from+1s`); to = from + 1; }
   if (to - from > 15.0) {
     console.warn(`[WARNING] Window duration ${(to - from).toFixed(1)}s > 15s. Analysis may take longer.`);
   }
 
-  const fps = +opt('fps', '60')!;
+  let fps = +opt('fps', '60')!;
+  if (!Number.isFinite(fps) || fps < 15 || fps > 120) { console.warn(`[motion] Invalid --fps, defaulting to 60`); fps = 60; }
   const binSec = +opt('bin', '0.25')!;
   const topN = +opt('topn', '12')!;
   const paletteArg = opt('palette', 'ink=#0A0A0B,bone=#EEE9DF,paper=#F7F4EC,signal=#FF4D12,signal-lite=#F9845A')!;

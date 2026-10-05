@@ -161,8 +161,10 @@ export function computeMotionEnergy(lumaCur: Float32Array, lumaPrev: Float32Arra
   return { E, E_p95 };
 }
 
-// Luma mean and contrast (standard deviation)
-export function computeLumaAndContrast(luma: Float32Array): { lumaMean: number; contrast: number } {
+// Luma mean and contrast (standard deviation; kept as `contrast` for backward compat
+// with calibration/example.json + F16 threshold. Michelson contrast exposed separately
+// as `contrastMichelson` per spec current-motion-system.md §B.)
+export function computeLumaAndContrast(luma: Float32Array): { lumaMean: number; contrast: number; contrastMichelson: number } {
   const n = luma.length;
   let sum = 0;
   for (let i = 0; i < n; i++) sum += luma[i]!;
@@ -173,7 +175,13 @@ export function computeLumaAndContrast(luma: Float32Array): { lumaMean: number; 
     const d = luma[i]! - mean;
     varSum += d * d;
   }
-  return { lumaMean: mean, contrast: Math.sqrt(varSum / n) };
+  const std = Math.sqrt(varSum / n);
+  // Michelson from p1/p99 to limit outlier influence.
+  const sorted = Float32Array.from(luma).sort();
+  const p01 = sorted[Math.floor(n * 0.01)] ?? 0;
+  const p99 = sorted[Math.floor(n * 0.99)] ?? 0;
+  const michelson = (p99 - p01) / Math.max(1e-6, p99 + p01);
+  return { lumaMean: mean, contrast: std, contrastMichelson: michelson };
 }
 
 // Sobel edge density (% pixels where G > 0.12) and edge map

@@ -115,9 +115,10 @@ export async function runCompare(page: Page, argv: string[] = []): Promise<void>
     }
   }
 
-  // If reference could not be captured live, create fallback comparison
+  // If reference could not be captured live, keep active for JSON compat but render
+  // an explicit placeholder panel (never a silent identical-image "perfect match").
   if (!refBase64) {
-    console.warn('[compare] Note: Example project live capture unavailable. Using active frame as fallback.');
+    console.warn('[compare] Note: Example project live capture unavailable. Rendering REFERENCE UNAVAILABLE placeholder.');
     refBase64 = activeBase64;
   }
 
@@ -156,8 +157,19 @@ export async function runCompare(page: Page, argv: string[] = []): Promise<void>
       ctxS.lineWidth = 3;
       ctxS.strokeRect(0, 0, 1920, 1080);
 
-      // Draw Panel B (Reference, Right 1920)
-      ctxS.drawImage(imgB, 0, 0, 1920, 1080, 1920, 0, 1920, 1080);
+      // Draw Panel B (Reference, Right 1920) — placeholder when ref unavailable
+      if (isRefLive) {
+        ctxS.drawImage(imgB, 0, 0, 1920, 1080, 1920, 0, 1920, 1080);
+      } else {
+        ctxS.fillStyle = '#141416';
+        ctxS.fillRect(1920, 0, 1920, 1080);
+        ctxS.fillStyle = '#FF4D12';
+        ctxS.font = 'bold 28px monospace';
+        ctxS.fillText('REFERENCE UNAVAILABLE', 1920 + 64, 540 - 16);
+        ctxS.font = '18px monospace';
+        ctxS.fillStyle = '#A0A0AA';
+        ctxS.fillText('Example project not reachable — no benchmark comparison.', 1920 + 64, 540 + 24);
+      }
       ctxS.strokeStyle = '#FF4D12';
       ctxS.lineWidth = 3;
       ctxS.strokeRect(1920, 0, 1920, 1080);

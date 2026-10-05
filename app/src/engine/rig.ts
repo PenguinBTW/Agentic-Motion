@@ -160,12 +160,17 @@ export class CameraRig {
       roll += noise1(t * 29.0, 104) * shakeRot;
     }
 
-    // Compute Forward unit vector towards target
+    // Compute Forward unit vector towards target (guard coincident pos==target)
     const dx = this.target[0] - p[0];
     const dy = this.target[1] - p[1];
     const dz = this.target[2] - p[2];
-    const len = Math.hypot(dx, dy, dz) || 1.0;
-    const Fw: V3 = [dx / len, dy / len, dz / len];
+    const rawLen = Math.hypot(dx, dy, dz);
+    if (rawLen < 1e-6) {
+      // Coincident waypoint — hold last forward to avoid zero-basis NaN.
+      console.warn('[rig] position==target, holding +Z forward to avoid degenerate basis');
+    }
+    const len = rawLen < 1e-6 ? 1.0 : rawLen;
+    const Fw: V3 = rawLen < 1e-6 ? [0, 0, 1] : [dx / len, dy / len, dz / len];
 
     // Singular-safe orthonormal basis:
     // When gaze aligns with world Y (|Fw.y| > 0.99), fallback to Z-axis reference up

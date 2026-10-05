@@ -28,7 +28,7 @@ const APP = path.resolve(import.meta.dir, '..');
 const REF_APP = path.resolve(opt('ref-dir', path.resolve(APP, '../../Example project/app'))!);
 const OUT_DIR = path.resolve(APP, '../calibration');
 const OUT_FILE = path.resolve(opt('out', path.join(OUT_DIR, 'example.json'))!);
-const FPS = Math.max(15, Math.min(60, +opt('fps', '30')!));
+const FPS = Math.max(15, Math.min(60, +opt('fps', '60')!));
 const MAX_S_PER_PLATE = flag('full') ? Infinity : +opt('max-s', '2.5')!;
 const PORT = +opt('port', '5188')!;
 
@@ -285,9 +285,10 @@ try {
       if (i > 0) {
         const eRes = computeMotionEnergy(luma, lumas[i - 1]!);
         frameEs.push(eRes.E);
-        const flow = computePhaseCorrelationFlow(luma, lumas[i - 1]!, FPS, 480, 270);
-        frameDx.push(flow.flow_dx);
-        frameDy.push(flow.flow_dy);
+        const flow = computePhaseCorrelationFlow(luma, lumas[i - 1]!, FPS, 480, 270, contrast);
+        // Invalid (flat-frame) flow returns 0 — do not let phase noise pollute calibration means.
+        frameDx.push(flow.invalid ? 0 : flow.flow_dx);
+        frameDy.push(flow.invalid ? 0 : flow.flow_dy);
       } else {
         frameEs.push(0);
         frameDx.push(0);
@@ -359,7 +360,7 @@ try {
 
     // Text analysis in window
     if (lyricsData) {
-      const textAnalysis = analyzeTextProbes(textProbes, lyricsData, from, to);
+      const textAnalysis = analyzeTextProbes(textProbes, lyricsData, from, to, FPS);
       for (const w of textAnalysis.words) {
         if (w.visible_during_sung_pct > 0) allMetrics.lyricVisiblePct!.push(w.visible_during_sung_pct);
         if (w.peak_hPct > 0) allMetrics.lyricPeakHPct!.push(w.peak_hPct);
@@ -373,12 +374,14 @@ try {
       }
     }
 
-    // Frame durations
-    const avgMs = (plateWallClock / frameCount) * 1000;
-    allMetrics.perfP50Ms!.push(avgMs * 0.9);
-    allMetrics.perfP95Ms!.push(avgMs * 1.2);
-    allMetrics.perfMaxMs!.push(avgMs * 1.5);
-    allMetrics.samplerMaxSpp!.push(1);
+    // Frame durations — wall-clock includes WS + harness overhead, so report measured
+    // mean honestly and leave distribution shape to real runs (do not fabricate p95/max).
+    // samplerMaxSpp: only push when adaptive sampling data exists; else leave empty
+    // so F14 falls back to CONFIG.sampler_max_spp instead of flagging on max=1.
+    const avgMs = (plateWallClock / Math.max(1, frameCount)) * 1000;
+    allMetrics.perfP50Ms!.push(avgMs);
+    allMetrics.perfP95Ms!.push(avgMs);
+    allMetrics.perfMaxMs!.push(avgMs);
 
     console.log(`  E_mean: ${eMean.toFixed(4)}, edgeDensity: ${edgeMean.toFixed(4)}, bright_nonsignal: ${bnsMean.toFixed(2)}%, wall: ${plateWallClock.toFixed(1)}s`);
   }

@@ -6,8 +6,13 @@ const v3 = (c: [number, number, number]) => `vec3(${c.map((x) => x.toFixed(5)).j
 /**
  * Shared GLSL (ES 3.0) prepended to every FSPass. Also importable into custom three.js
  * ShaderMaterials. Palette colours are LINEAR RGB.
+ *
+ * NOTE: `GLSL_COMMON` is baked at import time for backward compat. After
+ * `setDesignTokens()`, call `buildGLSLCommon()` and rebuild materials —
+ * token changes do NOT hot-update already-compiled shaders.
  */
-export const GLSL_COMMON = /* glsl */ `
+export function buildGLSLCommon(): string {
+  return /* glsl */ `
 #define PI 3.14159265359
 #define TAU 6.28318530718
 // Output scale: physical px per logical (1920x1080) px. gl_FragCoord, fwidth and dFdx are in
@@ -162,3 +167,7 @@ vec3 heat(float x) {
   return mix(c, vec3(1.0, 0.93, 0.85), smoothstep(0.8, 1.0, x));
 }
 `;
+}
+
+/** Baked at import for backward compat — see note above. Prefer buildGLSLCommon(). */
+export const GLSL_COMMON = buildGLSLCommon();

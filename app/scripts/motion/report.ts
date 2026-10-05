@@ -379,17 +379,17 @@ export function generateReportMarkdown(
   let compareSection = '';
   const calData = ctx.calibrationData;
   if (calData || (ctx.comparePath && refSummary)) {
-    const curCutRate = cuts.length / dur;
-    const curEMean = frames.reduce((a, b) => a + b.E, 0) / frames.length;
-    const curEP95 = frames.reduce((a, b) => a + b.E_p95, 0) / frames.length;
+    const curCutRate = dur > 0 ? cuts.length / dur : 0;
+    const curEMean = frames.length ? frames.reduce((a, b) => a + b.E, 0) / frames.length : 0;
+    const curEP95 = frames.length ? frames.reduce((a, b) => a + b.E_p95, 0) / frames.length : 0;
     const hitRatios = hits.map((h) => h.ratio).sort((a, b) => a - b);
     const curHitRatio = hitRatios.length ? hitRatios[Math.floor(hitRatios.length / 2)]! : 1.0;
     const textSizes = words.map((w) => w.peak_hPct).filter((h) => h > 0).sort((a, b) => a - b);
     const curTextRatio = textSizes.length > 1 ? textSizes[textSizes.length - 1]! / Math.max(0.1, textSizes[0]!) : 1.0;
-    const curSig = frames.reduce((a, b) => a + b.signal_pct, 0) / frames.length;
-    const curEdge = frames.reduce((a, b) => a + b.edge_density, 0) / frames.length;
+    const curSig = frames.length ? frames.reduce((a, b) => a + b.signal_pct, 0) / frames.length : 0;
+    const curEdge = frames.length ? frames.reduce((a, b) => a + b.edge_density, 0) / frames.length : 0;
     const deadFrames = frames.filter((f) => f.E < 0.001).length;
-    const curDeadFrac = deadFrames / frames.length;
+    const curDeadFrac = frames.length ? deadFrames / frames.length : 0;
 
     const metricsToCompare: { name: string; key?: string; val: number; refVal?: number }[] = [
       { name: 'cut rate/s', key: 'cutRatePerSec', val: curCutRate, refVal: refSummary?.metrics?.cutRatePerSec },

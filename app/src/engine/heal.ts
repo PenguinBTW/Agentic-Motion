@@ -203,7 +203,7 @@ export class AgentHeal {
             action: 'MUTATE_PROPERTY',
             target_file: targetFile,
             target_line_hint: 'particles / lines styling',
-            recommended_patch: `ctx.lines.seg(..., col[0], col[1], col[2], 0.25); // Dim peripheral line luminance`,
+            recommended_patch: `ctx.lines.seg(x0, y0, 0, x1, y1, 0, 1.5, col[0], col[1], col[2], 0.25); // Dim peripheral line luminance (replace x0/y0/x1/y1/col with real values)`,
             explanation: `Hero element captures only ${share.toFixed(0)}% visual gaze (target >= 60%). Lower peripheral particle velocity and line luminance.`,
           },
         };
@@ -275,7 +275,7 @@ export class AgentHeal {
             action: 'ADJUST_TIMING',
             target_file: targetFile,
             target_line_hint: 'exit transition',
-            recommended_patch: `const exitAlpha = 1 - motion.bezier('in-quad', Math.max(0, Math.min(1, (t - exitStart) / 0.5)));`,
+            recommended_patch: `const exitAlpha = 1 - motion.ease(t, exitStart, exitStart + 0.5, 'cubic'); // Smooth exit fade over 0.5s (define exitStart + t in scope)`,
             explanation: `Element remains active without motion for > 6s. Add a smooth exit fade or spring dismiss.`,
           },
         };

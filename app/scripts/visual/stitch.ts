@@ -75,7 +75,7 @@ export async function runStitch(page: Page, argv: string[] = []): Promise<void> 
     stripUrl: string;
     summary: any;
   } = await page.evaluate(
-    async ({ tA, tB, stripTimes }: { tA: number; tB: number; stripTimes: number[] }) => {
+    async ({ tA, tB, stripTimes, fromSceneName, toSceneName }: { tA: number; tB: number; stripTimes: number[]; fromSceneName: string; toSceneName: string }) => {
       const P = (window as any).__pdoom;
       const W = P.width ?? 1920;
       const H = P.height ?? 1080;

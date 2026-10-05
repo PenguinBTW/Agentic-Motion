@@ -126,7 +126,7 @@ export class AnalyticalParticles {
   private attrs: THREE.InstancedBufferAttribute[];
   private count = 0;
 
-  constructor(public readonly capacity = 4096, seed = 1337) {
+  constructor(public readonly capacity = 4096, private readonly seed = 1337) {
     this.geo = new THREE.InstancedBufferGeometry();
 
     // Quad covering [-1, 1] with z=0 and itemSize: 3 (eliminates boundingSphere NaN)
@@ -207,7 +207,12 @@ export class AnalyticalParticles {
     const glow = opts.glow ?? 1.5;
 
     if (opts.gravity) {
-      (this.mat.uniforms.gravity.value as THREE.Vector3).set(opts.gravity[0], opts.gravity[1], opts.gravity[2]);
+      const cur = this.mat.uniforms.gravity.value as THREE.Vector3;
+      if ((cur.x !== 0 || cur.y !== -0.4 || cur.z !== 0) &&
+          (cur.x !== opts.gravity[0] || cur.y !== opts.gravity[1] || cur.z !== opts.gravity[2])) {
+        console.warn('[particles] Per-emitter gravity overwrites shared uniform — all emitters share one gravity. Second value wins.');
+      }
+      cur.set(opts.gravity[0], opts.gravity[1], opts.gravity[2]);
     }
 
     // Construct orthonormal frame around direction vector D
@@ -232,12 +237,13 @@ export class AnalyticalParticles {
     for (let i = 0; i < emitterCount; i++) {
       if (this.count >= this.capacity) break;
       const idx = this.count++;
+      const s = this.seed + idx * 0.137;
 
-      // Seeded jitter on origin
+      // Seeded jitter on origin (seeded by constructor seed + particle index)
       const jitter = 0.1;
-      const ox = origin[0] + (Math.sin(i * 12.9898) * jitter);
-      const oy = origin[1] + (Math.cos(i * 78.233) * jitter);
-      const oz = origin[2] + (Math.sin(i * 45.164) * jitter);
+      const ox = origin[0] + (Math.sin((i + s) * 12.9898) * jitter);
+      const oy = origin[1] + (Math.cos((i + s) * 78.233) * jitter);
+      const oz = origin[2] + (Math.sin((i + s) * 45.164) * jitter);
 
       this.originArr[idx * 3 + 0] = ox;
       this.originArr[idx * 3 + 1] = oy;
@@ -279,13 +285,17 @@ export class AnalyticalParticles {
     this.geo.instanceCount = this.count;
 
     // Compute analytical bounding box and bounding sphere for Three.js culling
-    this.updateBounds(origin, speed, lifetime);
+    this.updateBounds(origin, speed, lifetime, opts.gravity, turb, size);
 
     return this;
   }
 
-  private updateBounds(origin: V3, speed: number, lifetime: number): void {
-    const maxRadius = speed * lifetime + 1.0;
+  private updateBounds(origin: V3, speed: number, lifetime: number, gravity?: V3, turbulence = 0, size = 0): void {
+    const g = gravity ? Math.hypot(gravity[0], gravity[1], gravity[2]) : 0.4;
+    // Bounds include ballistic term 0.5*g*t² + turbulence wander + particle size.
+    // Note: mesh.frustumCulled=false currently disables culling; bounds kept accurate
+    // for future use and for diagnostics.
+    const maxRadius = speed * lifetime + 0.5 * g * lifetime * lifetime + turbulence * lifetime + size + 1.0;
     this.geo.boundingSphere = new THREE.Sphere(
       new THREE.Vector3(origin[0], origin[1], origin[2]),
       maxRadius

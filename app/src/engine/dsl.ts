@@ -323,6 +323,11 @@ export interface DeclarativeSceneDef {
  * Fluent factory function that wraps a declarative scene definition into an engine SceneClass.
  */
 export function defineScene(def: DeclarativeSceneDef): SceneClass {
+  if (def.duration !== undefined) {
+    // duration is informational only — timeline.ts/driver owns `end`. Warn so agents
+    // don't silently tune a dead field.
+    console.warn(`[dsl] defineScene '${def.id}' duration=${def.duration} is advisory only; timeline driver owns end. Remove or sync with driver.`);
+  }
   return class DeclarativeScene extends Scene {
     private sc!: SceneContext;
     private setupDone = false;

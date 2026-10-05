@@ -81,7 +81,7 @@ export async function runOnion(page: Page, argv: string[] = []): Promise<void> {
 
   // Render each frame and composite in browser context
   const result: { dataUrl: string; summary: any } = await page.evaluate(
-    async ({ times }: { times: number[] }) => {
+    async ({ times, sceneName }: { times: number[]; sceneName: string }) => {
       const P = (window as any).__pdoom;
       const W = P.width ?? 1920;
       const H = P.height ?? 1080;
@@ -232,7 +232,7 @@ export async function runOnion(page: Page, argv: string[] = []): Promise<void> {
       return {
         dataUrl,
         summary: {
-          scene: opts.scene ?? 'all',
+          scene: sceneName,
           center_t: times[midIdx],
           window_seconds: times[N - 1]! - times[0]!,
           from: times[0],
