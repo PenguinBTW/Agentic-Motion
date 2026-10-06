@@ -59,6 +59,8 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
   }
   const numSamples = opts.samples ?? 24;
 
+  if (from === undefined || to === undefined) throw new Error('[godview] from/to resolution failed');
+
   const ROOT = path.resolve(import.meta.dir, '../../..');
   const defaultOut = path.join(ROOT, 'out/visual/godview');
   const outDir = path.resolve(opts.out ?? defaultOut);
@@ -68,8 +70,11 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
 
   const showCorridor = Boolean(opts.corridor || (opts.scene && (opts.scene.includes('doors') || opts.scene.includes('corridor'))));
 
-  const result: { dataUrl: string; summary: any } = await page.evaluate(
-    async ({ t0, t1, N, showCorridor, sceneName }: { t0: number; t1: number; N: number; showCorridor: boolean; sceneName: string }) => {
+  const result: { dataUrl: string; summary: any } = await page.evaluate<
+    { dataUrl: string; summary: any },
+    { t0: number; t1: number; N: number; showCorridor: boolean; sceneName: string }
+  >(
+    async ({ t0, t1, N, showCorridor, sceneName }) => {
       const P = (window as any).__pdoom;
       const W = 1920;
       const H = 1080;
@@ -103,7 +108,8 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
             }
           } catch {}
         } else {
-          // Fallback analytical corridor curve (e.g. doors / generic forward dolly)
+          // Fallback analytical corridor curve (generic template, NOT measured —
+          // only used when live __pdoom camera unavailable; labeled as such in output).
           const u = (t - t0) / Math.max(0.1, t1 - t0);
           z = -2.2 + u * u * 48.0;
           x = Math.sin(u * Math.PI * 2) * 0.4;
@@ -123,13 +129,15 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
       }
       if (samples.length > 1) samples[0]!.v = samples[1]!.v;
 
-      // Establish coordinate bounding box
-      const minX = Math.min(-2.5, ...samples.map((s) => s.x - 1.5));
-      const maxX = Math.max(2.5, ...samples.map((s) => s.x + 1.5));
-      const minZ = Math.min(-4.0, ...samples.map((s) => s.z - 2.0));
-      const maxZ = Math.max(50.0, ...samples.map((s) => s.z + 5.0));
-      const minY = Math.min(0, ...samples.map((s) => s.y - 0.5));
-      const maxY = Math.max(3.6, ...samples.map((s) => s.y + 0.8));
+      // Establish coordinate bounding box: corridor scenes keep architectural context
+      // (±2.5m, -4/50m, 0/3.6m); generic scenes frame tightly around samples.
+      const xs = samples.map((s) => s.x), ys = samples.map((s) => s.y), zs = samples.map((s) => s.z);
+      const minX = showCorridor ? Math.min(-2.5, ...samples.map((s) => s.x - 1.5)) : Math.min(...xs) - 1.5;
+      const maxX = showCorridor ? Math.max(2.5, ...samples.map((s) => s.x + 1.5)) : Math.max(...xs) + 1.5;
+      const minZ = showCorridor ? Math.min(-4.0, ...samples.map((s) => s.z - 2.0)) : Math.min(...zs) - 2.0;
+      const maxZ = showCorridor ? Math.max(50.0, ...samples.map((s) => s.z + 5.0)) : Math.max(...zs) + 5.0;
+      const minY = showCorridor ? Math.min(0, ...samples.map((s) => s.y - 0.5)) : Math.min(...ys) - 0.5;
+      const maxY = showCorridor ? Math.max(3.6, ...samples.map((s) => s.y + 0.8)) : Math.max(...ys) + 0.8;
 
       // Create Blueprint Canvas
       const cv = document.createElement('canvas');

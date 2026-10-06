@@ -151,14 +151,15 @@ All image metrics run on **$480 \times 270$** downscaled frames ($4 \times 4$ bo
 
 $$R_{480}(x, y) = \frac{1}{16} \sum_{u=0}^{3} \sum_{v=0}^{3} R_{1920}(4x + u, 1080 - 1 - (4y + v))$$
 
-### B. Rec.709 Luma & Michelson Contrast
+### B. Rec.709 Luma & Contrast (std + Michelson)
+
 Luminance is calculated per pixel using standard HDTV Rec.709 coefficients:
 
 $$L(x, y) = 0.2126\,R + 0.7152\,G + 0.0722\,B$$
 
-Michelson contrast across the frame is calculated from the 1st and 99th percentiles of $L$:
+`contrast` in telemetry/CSV/calibration is the standard deviation of $L$ (kept for backward compat with `example.json` + F16 `contrast<0.02`). Michelson contrast from the 1st/99th percentiles is exposed separately as `contrastMichelson`:
 
-$$C = \frac{L_{p99} - L_{p01}}{L_{p99} + L_{p01} + \epsilon}$$
+$$C_{michelson} = \frac{L_{p99} - L_{p01}}{L_{p99} + L_{p01} + \epsilon}$$
 
 ### C. Motion Energy ($E$ and $E_{p95}$)
 Motion energy measures the raw frame-to-frame temporal difference:

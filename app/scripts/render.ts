@@ -49,10 +49,20 @@ import {
 
 const argv = process.argv.slice(2);
 const mode = argv[0] ?? 'stills';
-const opt = (k: string, d?: string) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? argv[i + 1] : d; };
+const isFlagVal = (v?: string) => v !== undefined && !v.startsWith('--');
+const opt = (k: string, d?: string) => { const i = argv.indexOf(`--${k}`); const v = i >= 0 ? argv[i + 1] : d; return isFlagVal(v) ? v : (i >= 0 ? undefined : d); };
+const numOpt = (k: string, def: number, min?: number, max?: number): number => {
+  const raw = opt(k);
+  if (raw === undefined) return def;
+  const v = +raw;
+  if (!Number.isFinite(v)) { console.warn(`[${mode}] Invalid --${k} '${raw}', defaulting to ${def}`); return def; }
+  if (min !== undefined && v < min) { console.warn(`[${mode}] --${k} ${v} < min ${min}, clamping`); return min; }
+  if (max !== undefined && v > max) { console.warn(`[${mode}] --${k} ${v} > max ${max}, clamping`); return max; }
+  return v;
+};
 const flag = (k: string) => argv.includes(`--${k}`);
 const APP = path.resolve(import.meta.dir, '..');
-const SCALE = Math.max(1, Math.round(+opt('scale', '1')!));
+const SCALE = Math.max(1, Math.round(numOpt('scale', 1, 1, 4)));
 const OW = 1920 * SCALE, OH = 1080 * SCALE; // output size
 // --samples N (fixed) or --samples auto [--min-samples 4] [--max-samples 324] [--tol 3] (adaptive, see Engine.render)
 const SAMPLES = opt('samples', '1') === 'auto'
@@ -215,26 +225,23 @@ async function video(page: Page, from: number, to: number, fps: number, out: str
 }
 
 async function motion(page: Page) {
-  let from = +opt('from', '0')!;
-  let to = +opt('to', '10')!;
-  if (!Number.isFinite(from) || from < 0) { console.warn(`[motion] Invalid --from, defaulting to 0`); from = 0; }
-  if (!Number.isFinite(to) || to < 0) { console.warn(`[motion] Invalid --to, defaulting to 10`); to = 10; }
+  let from = numOpt('from', 0, 0);
+  let to = numOpt('to', 10, 0);
   if (to <= from) { console.warn(`[motion] Empty window (to<=from), expanding to from+1s`); to = from + 1; }
   if (to - from > 15.0) {
     console.warn(`[WARNING] Window duration ${(to - from).toFixed(1)}s > 15s. Analysis may take longer.`);
   }
 
-  let fps = +opt('fps', '60')!;
-  if (!Number.isFinite(fps) || fps < 15 || fps > 120) { console.warn(`[motion] Invalid --fps, defaulting to 60`); fps = 60; }
-  const binSec = +opt('bin', '0.25')!;
-  const topN = +opt('topn', '12')!;
+  const fps = numOpt('fps', 60, 15, 120);
+  const binSec = numOpt('bin', 0.25, 0.05, 2);
+  const topN = Math.round(numOpt('topn', 12, 1, 100));
   const paletteArg = opt('palette', 'ink=#0A0A0B,bone=#EEE9DF,paper=#F7F4EC,signal=#FF4D12,signal-lite=#F9845A')!;
   const palette = parsePalette(paletteArg);
   const paletteNames = palette.map((p) => p.name);
 
   const samplesArg = opt('samples', '1')!;
-  const motionSamples = samplesArg === 'auto' ? SAMPLES : +samplesArg;
-  const motionShutter = +opt('shutter', '0')!;
+  const motionSamples = samplesArg === 'auto' ? SAMPLES : numOpt('samples', 1, 1, 324);
+  const motionShutter = numOpt('shutter', 0, 0, 1);
 
   const allowBlankRanges: [number, number][] = [];
   const abArg = opt('allow-blank');

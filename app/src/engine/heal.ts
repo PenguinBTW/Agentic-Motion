@@ -62,7 +62,7 @@ export class AgentHeal {
             action: 'TUNE_CURVE',
             target_file: targetFile,
             target_line_hint: 'motion.ease or waypoint coordinates',
-            recommended_patch: `motion.ease(t, t0, t1, 'cubic') // Smooth spatial arc curvature`,
+            recommended_patch: `motion.ease(t, t0, t1, 'cubic') // Smooth spatial arc curvature (define t/t0/t1 in scope)`,
             explanation: `Motion onion exposure reveals irregular spatial velocity stepping or trajectory jitter. Ensure C2 continuity across path waypoints.`,
           },
         };
@@ -98,7 +98,7 @@ export class AgentHeal {
             action: 'ADJUST_TIMING',
             target_file: targetFile,
             target_line_hint: 'post.fade or scene boundary timing',
-            recommended_patch: `post.fade = ease.inQuad((t - cutT) / 0.15); // Smooth transition crossfade`,
+            recommended_patch: `post.fade = ease.inQuad(clamp((t - cutT) / 0.15, 0, 1)); // Smooth transition crossfade (import {ease,clamp} from './util'; define t/cutT)`,
             explanation: `Seam stitch inspector detected luminance flash or motion vector snap across transition seam (delta > 25%). Match boundary velocities or apply a 150ms seam dissolve.`,
           },
         };
@@ -161,7 +161,7 @@ export class AgentHeal {
             action: 'ADJUST_CAMERA',
             target_file: targetFile,
             target_line_hint: 'rig.setPath waypoint',
-            recommended_patch: `pos: [pos[0], pos[1], pos[2] - 0.5], focalLength: 50 // Retract waypoint along gaze normal`,
+            recommended_patch: `pos: [pos[0], pos[1], pos[2] - 0.5], focalLength: 50 // Retract waypoint along gaze normal (define pos: V3 in scope)`,
             explanation: `Camera penetrates near-clip frustum (${dist.toFixed(2)}m < 0.10m). Retract waypoint 0.5m backwards or lengthen focal length.`,
           },
         };

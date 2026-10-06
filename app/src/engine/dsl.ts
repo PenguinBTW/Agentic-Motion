@@ -268,7 +268,9 @@ export class SceneContext {
   }
 
   /**
-   * Flush all GPU vector batches and 2D canvas layers into out target
+   * Flush GPU vector batches and 2D canvas layers into out target.
+   * NOTE: 2D-only (lines/sdf/layer2d). Particles are NOT flushed here —
+   * use the compositor path for particles (flush needs cam+t; kept 2D-only by design).
    */
   flush(out: THREE.WebGLRenderTarget): void {
     // 1. Flush 3D lines if any were queued
@@ -323,10 +325,11 @@ export interface DeclarativeSceneDef {
  * Fluent factory function that wraps a declarative scene definition into an engine SceneClass.
  */
 export function defineScene(def: DeclarativeSceneDef): SceneClass {
-  if (def.duration !== undefined) {
-    // duration is informational only — timeline.ts/driver owns `end`. Warn so agents
-    // don't silently tune a dead field.
-    console.warn(`[dsl] defineScene '${def.id}' duration=${def.duration} is advisory only; timeline driver owns end. Remove or sync with driver.`);
+  if (def.duration !== undefined && !(globalThis as any).__dslDurationWarned) {
+    // duration is informational only — timeline.ts/driver owns `end`. Warn once so agents
+    // don't silently tune a dead field (matches driver in demo but still advisory).
+    console.warn(`[dsl] defineScene duration is advisory only; timeline driver owns end.`);
+    (globalThis as any).__dslDurationWarned = true;
   }
   return class DeclarativeScene extends Scene {
     private sc!: SceneContext;

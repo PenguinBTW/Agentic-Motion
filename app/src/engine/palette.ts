@@ -16,8 +16,10 @@ export const HEX = {
 
 export type PaletteKey = keyof typeof HEX;
 
-/** Linear RGB triplets for GL uniforms. Evaluated dynamically from active tokens. */
-export const LIN: Record<PaletteKey, [number, number, number]> = new Proxy({} as any, {
+/** Linear RGB triplets for GL uniforms. Evaluated dynamically from active tokens.
+ * Typed as PaletteKey|string so semantic token names (surface/accent/primaryText)
+ * used in docs also typecheck — falls back to tokenToLinear at runtime. */
+export const LIN: Record<PaletteKey | string, [number, number, number]> = new Proxy({} as any, {
   get: (_, prop: string) => tokenToLinear(prop),
 });
 

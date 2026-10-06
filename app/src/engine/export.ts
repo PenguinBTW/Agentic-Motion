@@ -110,6 +110,14 @@ export class ExportPipeline {
     if (opts.from !== undefined && opts.to !== undefined && opts.to <= opts.from) {
       errors.push(`Invalid time range: to (${opts.to}) must be greater than from (${opts.from}).`);
     }
+    const w = opts.width ?? 1920, h = opts.height ?? 1080, fps = opts.fps ?? 60, smp = (opts as any).samples ?? 1;
+    if (!Number.isFinite(w) || w < 320 || w > 7680) errors.push(`Invalid width ${opts.width} (320–7680)`);
+    if (!Number.isFinite(h) || h < 240 || h > 4320) errors.push(`Invalid height ${opts.height} (240–4320)`);
+    if (!Number.isFinite(fps) || fps < 15 || fps > 120) errors.push(`Invalid fps ${opts.fps} (15–120)`);
+    if (!Number.isFinite(smp) || smp < 1 || smp > 324) errors.push(`Invalid samples ${smp} (1–324)`);
+    for (const p of [opts.outPath, (opts as any).audioTrack]) {
+      if (typeof p === 'string' && (/["`\n\r$;|&]/.test(p) || p.includes('..'))) errors.push(`Unsafe path '${p}' (quotes/shell metachars/.. rejected)`);
+    }
 
     return { valid: errors.length === 0, errors };
   }
@@ -194,11 +202,12 @@ export class ExportPipeline {
    * Format terminal command string for executing render.ts with the selected preset
    */
   static buildCLICommand(opts: ExportVideoOptions): string {
+    const q = (s: string) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
     const parts = [
       'bun',
       'scripts/render.ts',
       'video',
-      `--out "${opts.outPath}"`,
+      `--out ${q(opts.outPath)}`,
       `--fps ${opts.fps ?? 60}`,
     ];
 

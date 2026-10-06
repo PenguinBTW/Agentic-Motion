@@ -99,7 +99,11 @@ export class KineticText {
     const effFontSize = this.style.fontSize * (this.is3DAnchored ? this.depthScale : 1.0);
     const lineH = effFontSize * this.style.lineHeight;
     const maxLen = this.lines.length > 0 ? Math.max(0, ...this.lines.map((l) => l.length)) : 0;
-    const approxW = maxLen * effFontSize * 0.55;
+    // Include letterSpacing tracking in width (0.55 heuristic + tracking; full measureText
+    // requires canvas/fonts-ready — future work, see audit).
+    const ls = this.style.letterSpacing;
+    const tracking = typeof ls === 'number' ? ls : (typeof ls === 'string' ? parseFloat(ls) || 0 : 0);
+    const approxW = maxLen * effFontSize * 0.55 + Math.max(0, maxLen - 1) * tracking;
     const approxH = Math.max(lineH, this.lines.length * lineH);
 
     let minX = x;
@@ -127,7 +131,9 @@ export class KineticText {
 
     const paragraphs = this.rawText.split('\n');
     const wrappedLines: string[] = [];
-    const approxCharWidth = this.style.fontSize * 0.55;
+    const _ls = this.style.letterSpacing;
+    const tracking = typeof _ls === 'number' ? _ls : (typeof _ls === 'string' ? parseFloat(_ls) || 0 : 0);
+    const approxCharWidth = this.style.fontSize * 0.55 + tracking;
 
     for (const para of paragraphs) {
       if (para.trim().length === 0) {
@@ -309,12 +315,18 @@ export class KineticText {
     }
 
     if (staggerStates && staggerStates.length > 0) {
-      // Staggered Unit Rendering
+      // Staggered Unit Rendering (NOTE: units share anchor x; per-unit advances need
+      // measureText layout — future work. Scale is applied; x/width remain 0.)
       for (const st of staggerStates) {
         if (st.alpha <= 0.001) continue;
         ctx.save();
         ctx.globalAlpha *= st.alpha * this.style.alpha;
         const unitY = y + st.offsetY;
+        if (st.scale !== 1.0) {
+          ctx.translate(x, unitY);
+          ctx.scale(st.scale, st.scale);
+          ctx.translate(-x, -unitY);
+        }
 
         if (this.halo) {
           ctx.strokeStyle = this.halo.haloColor;

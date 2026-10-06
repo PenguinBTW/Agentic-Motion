@@ -286,7 +286,8 @@ export class Engine {
         for (let k = 0; k < n; k++) sub(k, (k + 0.5) / n - 0.5, this.sumRT, dt / n);
       } else {
         const lg3 = (x: number) => Math.log(x / 4) / Math.log(3);
-        const lo = Math.max(0, Math.round(lg3(samples.min))), hi = Math.max(lo, Math.floor(lg3(maxAdaptive) + 1e-9));
+        const cappedMax = Math.min(maxAdaptive, 972);
+        const lo = Math.max(0, Math.round(lg3(samples.min))), hi = Math.max(lo, Math.floor(lg3(cappedMax) + 1e-9));
         const u = ternaryOffsets(hi);
         n = 4 * 3 ** lo;
         this.lastErrors = [];

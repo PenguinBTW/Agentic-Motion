@@ -65,7 +65,19 @@ export const DefaultTokens: DesignTokens = {
 
 let activeTokens: DesignTokens = { ...DefaultTokens };
 
-export function setDesignTokens(tokens: Partial<DesignTokens>) {
+export function setDesignTokens(tokens: Partial<Omit<DesignTokens, 'palette' | 'typography'>> & { palette?: Partial<DesignTokens['palette']>; typography?: Partial<DesignTokens['typography']> }) {
+  // Validate hex to avoid NaN uniforms; fall back + warn.
+  const isHex = (v?: string) => typeof v === 'string' && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v);
+  if (tokens.palette) {
+    for (const [k, v] of Object.entries(tokens.palette)) {
+      if (v !== undefined && !isHex(v)) console.warn(`[tokens] Invalid hex for '${k}': '${v}' — keeping previous value.`);
+    }
+    const clean: Record<string, string> = {};
+    for (const [k, v] of Object.entries(tokens.palette)) if (v === undefined || isHex(v)) clean[k] = v as string;
+    tokens = { ...tokens, palette: { ...(tokens as any).palette, ...clean } as any };
+    // Drop invalid keys so spread below can't poison.
+    for (const k of Object.keys(tokens.palette!)) if (!isHex((tokens.palette as any)[k])) delete (tokens.palette as any)[k];
+  }
   activeTokens = {
     ...activeTokens,
     ...tokens,
@@ -78,6 +90,8 @@ export function setDesignTokens(tokens: Partial<DesignTokens>) {
       ...(tokens.typography ?? {}),
     },
   };
+  // NOTE: GL shaders baked via buildGLSLCommon() do NOT hot-reload. Rebuild materials
+  // via buildGLSLCommon() after this call, or restart. See glsl/common.ts.
 }
 
 export function getDesignTokens(): DesignTokens {

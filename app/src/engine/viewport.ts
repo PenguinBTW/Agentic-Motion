@@ -33,6 +33,7 @@ export class ViewportSpace {
    */
   static fovToFocalLength(fovYDeg: number, h = H): number {
     const rad = (fovYDeg * Math.PI) / 180;
+    if (Math.abs(rad) < 1e-6) return h / (2 * Math.tan(1e-6 / 2));
     return h / (2 * Math.tan(rad / 2));
   }
 

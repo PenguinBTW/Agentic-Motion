@@ -131,18 +131,20 @@ export class AudioData {
     };
   }
 
-  /** Continuous beat index: 0 at first beat, fractional in between (extrapolated outside). */
+  /** Continuous beat index: 0 at first beat, fractional in between (extrapolated outside). Guards dup timestamps. */
   beatAt(t: number): number {
     const b = this.beats;
     if (b.length < 2) return t * (this.bpm / 60);
-    if (t <= b[0]!) return (t - b[0]!) / (b[1]! - b[0]!);
+    const span = (a: number, c: number) => (c > a ? (t - a) / (c - a) : 0);
+    if (t <= b[0]!) return span(b[0]!, b[1]!);
     if (t >= b[b.length - 1]!) {
       const p = b[b.length - 1]! - b[b.length - 2]!;
-      return b.length - 1 + (t - b[b.length - 1]!) / p;
+      return b.length - 1 + (p > 0 ? (t - b[b.length - 1]!) / p : 0);
     }
     let lo = 0, hi = b.length - 1;
     while (hi - lo > 1) { const m = (lo + hi) >> 1; if (b[m]! <= t) lo = m; else hi = m; }
-    return lo + (t - b[lo]!) / (b[hi]! - b[lo]!);
+    const s = b[hi]! - b[lo]!;
+    return lo + (s > 0 ? (t - b[lo]!) / s : 0);
   }
 
   /** Time of (fractional) beat index. */
@@ -156,18 +158,19 @@ export class AudioData {
     return b[k]! + (b[k + 1]! - b[k]!) * (i - k);
   }
 
-  /** Continuous bar index from downbeats (0 at first downbeat). */
+  /** Continuous bar index from downbeats (0 at first downbeat). Guards dup timestamps. */
   barAt(t: number): number {
     const d = this.downbeats;
     if (d.length < 2) return this.beatAt(t) / 4;
-    if (t <= d[0]!) return (t - d[0]!) / (d[1]! - d[0]!);
+    if (t <= d[0]!) { const s = d[1]! - d[0]!; return s > 0 ? (t - d[0]!) / s : 0; }
     if (t >= d[d.length - 1]!) {
       const p = d[d.length - 1]! - d[d.length - 2]!;
-      return d.length - 1 + (t - d[d.length - 1]!) / p;
+      return d.length - 1 + (p > 0 ? (t - d[d.length - 1]!) / p : 0);
     }
     let lo = 0, hi = d.length - 1;
     while (hi - lo > 1) { const m = (lo + hi) >> 1; if (d[m]! <= t) lo = m; else hi = m; }
-    return lo + (t - d[lo]!) / (d[hi]! - d[lo]!);
+    const s = d[hi]! - d[lo]!;
+    return lo + (s > 0 ? (t - d[lo]!) / s : 0);
   }
 
   /** Nearest beat time to t. */

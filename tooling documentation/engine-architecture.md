@@ -203,6 +203,7 @@ export class CompositorGraph {
     matte?: { source: string; mode: 'alpha' | 'inv-alpha' | 'luma' | 'inv-luma' };
     blend?: 'normal' | 'add' | 'screen' | 'multiply';
     opacity?: number;
+    /** Accepted but no-op in v0.5 — warns at runtime. Scoped post isolation is future work. */
     post?: ScopedPostOpts;
   }): this;
   evaluate(renderer: THREE.WebGLRenderer, finalTarget: THREE.WebGLRenderTarget): void;
@@ -324,6 +325,7 @@ Factory pattern that protects autonomous coding agents from boilerplate errors.
 ```typescript
 export interface DeclarativeSceneDef {
   id: string;
+  /** Advisory only — timeline driver owns `end`. Warns once if set. */
   duration?: number;
   rigMode?: 'perspective' | 'isometric' | 'orthographic';
   particleCapacity?: number;

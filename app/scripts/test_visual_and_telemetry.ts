@@ -68,21 +68,30 @@ assert(compareOpts.out === 'out/test_compare', 'parseCompareArgs parses --out');
 console.log('\n--- 2. Testing Summary JSON Schemas ---');
 
 const onionSummary = {
-  t: 10.0,
-  window_ms: 500,
+  scene: 'intro',
+  center_t: 10.0,
+  window_seconds: 0.5,
+  from: 9.75,
+  to: 10.25,
   frame_count: 10,
+  timestamps: [9.75, 10.25],
   artifacts: ['onion_motion.png'],
 };
-assert(typeof onionSummary.t === 'number' && Array.isArray(onionSummary.artifacts), 'Onion summary schema complies with spec');
+assert(typeof onionSummary.center_t === 'number' && onionSummary.frame_count === 10 && Array.isArray(onionSummary.timestamps), 'Onion summary schema complies with spec (scene/center_t/window_seconds/frame_count/timestamps)');
 
 const godviewSummary = {
-  from_s: 8.0,
-  to_s: 18.5,
+  scene: 'orbit',
+  from: 8.0,
+  to: 18.5,
+  duration: 10.5,
   sample_count: 24,
-  camera_mode: 'cinematic_perspective',
+  max_speed_mps: 5.0,
+  avg_speed_mps: 2.0,
+  min_near_distance_m: 0.5,
+  samples: [{ t: 8.0, x: 0, y: 1, z: 2, fx: 0, fy: 0, fz: 0, v: 1 }],
   artifacts: ['cam_godview.png'],
 };
-assert(typeof godviewSummary.from_s === 'number' && typeof godviewSummary.camera_mode === 'string', 'GodView summary schema complies with spec');
+assert(typeof godviewSummary.scene === 'string' && godviewSummary.sample_count === 24 && Array.isArray(godviewSummary.samples), 'GodView summary schema complies with spec (scene/duration/samples)');
 
 const stitchSummary = {
   cut_timestamp: 25.6,
@@ -97,11 +106,13 @@ assert(typeof stitchSummary.cut_timestamp === 'number' && stitchSummary.artifact
 const compareSummary = {
   active_scene: 'boundary',
   active_t: 27.5,
-  reference_scene: 'loss',
-  reference_t: 14.2,
+  ref_scene: 'loss',
+  ref_t: 14.2,
+  resolution: [1920, 1080],
+  status: 'benchmarked',
   artifacts: ['ab_side_by_side.png', 'ab_split_wipe.png'],
 };
-assert(typeof compareSummary.active_scene === 'string' && compareSummary.artifacts.length === 2, 'Compare summary schema complies with spec');
+assert(typeof compareSummary.active_scene === 'string' && compareSummary.ref_scene === 'loss' && Array.isArray(compareSummary.resolution), 'Compare summary schema complies with spec (active_scene/ref_scene/resolution/status)');
 
 // -------------------------------------------------------------
 // 3. Pixel Metrics Math: Sobel Edge Density Threshold
@@ -169,7 +180,7 @@ const emptyTextAnalysis: TextAnalysisResult = {
 const emptyFlags = evaluateFlags([], emptyTextAnalysis, [], [], []);
 assert(Array.isArray(emptyFlags) && emptyFlags.length === 0, 'evaluateFlags handles empty frames array safely');
 
-// Create mock frames
+// Create mock frames (1s dead motion → F08 dead-motion must fire; spp=1 exercises F14 fallback)
 const mockFrames: FrameMetrics[] = [];
 for (let i = 0; i < 60; i++) {
   mockFrames.push({
@@ -189,10 +200,11 @@ for (let i = 0; i < 60; i++) {
     segs: 1,
     ms: 5.0,
     spp: 1,
+    palette_shares: {},
   });
 }
 
-// Test waiver support
+// Test waiver support on F08 dead-motion (guaranteed to fire on 1s dead window)
 const flagsWithWaiver = evaluateFlags(
   mockFrames,
   emptyTextAnalysis,
@@ -201,30 +213,27 @@ const flagsWithWaiver = evaluateFlags(
   [],
   [],
   null,
-  { 'F03': 'Intentional pause for cinematic pacing' }
+  { 'F08': 'Intentional pause for cinematic pacing' }
 );
-const f03Flags = flagsWithWaiver.filter((f) => f.rule === 'F03');
-if (f03Flags.length > 0) {
-  assert(f03Flags[0]!.waived === true, 'F03 flag is waived when rule waiver provided');
-  assert(f03Flags[0]!.waiver_reason === 'Intentional pause for cinematic pacing', 'Waiver reason is populated');
-} else {
-  assert(true, 'No F03 flags generated in test window');
+const f08Flags = flagsWithWaiver.filter((f) => f.rule === 'F08' || f.rule === 'dead_motion');
+assert(f08Flags.length > 0, 'F08 dead-motion fires on 1s dead window (waiver test precondition)');
+if (f08Flags.length > 0) {
+  assert(f08Flags[0]!.waived === true, 'F08 flag is waived when rule waiver provided');
+  assert(f08Flags[0]!.waiverReason === 'Intentional pause for cinematic pacing', 'Waiver reason is populated (waiverReason)');
 }
 
-// Test calibration fallback when distribution count n === 0
+// Test calibration fallback when distribution count n === 0 (real CalibrationData shape)
 const emptyCalibration: CalibrationData = {
-  generatedAt: new Date().toISOString(),
-  totalSecondsAnalyzed: 0,
-  distributions: {
-    cutRatePerSec: { n: 0, p10: 0, p50: 0, p90: 0, mean: 0, std: 0 },
-    energyMean: { n: 0, p10: 0, p50: 0, p90: 0, mean: 0, std: 0 },
-    kickResponseRatioMedian: { n: 0, p10: 0, p50: 0, p90: 0, mean: 0, std: 0 },
-    textMaxSizeRatioMedian: { n: 0, p10: 0, p50: 0, p90: 0, mean: 0, std: 0 },
-    signalPct: { n: 0, p10: 0, p50: 0, p90: 0, mean: 0, std: 0 },
-    brightNonsignalPct: { n: 0, p10: 0, p50: 0, p90: 0, mean: 0, std: 0 },
-    edgeDensity: { n: 0, p10: 0, p50: 0, p90: 0, mean: 0, std: 0 },
-    deadMotionFraction: { n: 0, p10: 0, p50: 0, p90: 0, mean: 0, std: 0 },
-  },
+  lyricVisiblePct: { min: 0, p10: 0, p50: 0, p90: 0, max: 0, n: 0 },
+  cutRatePerSec: { min: 0, p10: 0, p50: 0, p90: 0, max: 0, n: 0 },
+  energyMean: { min: 0, p10: 0, p50: 0, p90: 0, max: 0, n: 0 },
+  kickResponseRatioMedian: { min: 0, p10: 0, p50: 0, p90: 0, max: 0, n: 0 },
+  textMaxSizeRatioMedian: { min: 0, p10: 0, p50: 0, p90: 0, max: 0, n: 0 },
+  signalPct: { min: 0, p10: 0, p50: 0, p90: 0, max: 0, n: 0 },
+  brightNonsignalPct: { min: 0, p10: 0, p50: 0, p90: 0, max: 0, n: 0 },
+  edgeDensity: { min: 0, p10: 0, p50: 0, p90: 0, max: 0, n: 0 },
+  deadMotionFraction: { min: 0, p10: 0, p50: 0, p90: 0, max: 0, n: 0 },
+  samplerMaxSpp: { min: 0, p10: 0, p50: 0, p90: 0, max: 0, n: 0 },
 };
 
 const calibratedFlags = evaluateFlags(
@@ -260,12 +269,29 @@ const testFrame: FrameMetrics = {
   segs: 2,
   ms: 12.4,
   spp: 4,
+  palette_shares: { signal: 1.5 },
 };
 
 const csv = generateFramesCsv([testFrame]);
 const lines = csv.trim().split('\n');
 assert(lines[0]!.includes('other_pct'), 'frames.csv header includes other_pct column');
 assert(lines[1]!.includes('0.125'), 'frames.csv data row correctly outputs other_pct value (0.125)');
+
+// -------------------------------------------------------------
+// 7. Parser hardening + threshold fallbacks (non-vacuous)
+// -------------------------------------------------------------
+console.log('\n--- 7. Testing parser hardening + calibration fallbacks ---');
+
+// Flag-as-value must not be consumed (isFlagVal guard)
+const onionFlagEat = parseOnionArgs(['--out', '--t', '5']);
+assert(onionFlagEat.out !== '--t', 'onion parser does not consume next flag as --out value');
+// NaN frames rejected (stays undefined → caller defaults to 10)
+const onionNaN = parseOnionArgs(['--frames', 'abc']);
+assert(onionNaN.frames === undefined, 'onion parser rejects NaN frames (leaves undefined for default)');
+// F14 degenerate calibration (max<=1) falls back to CONFIG (324) — spp=1 must not flag
+const degCal: CalibrationData = { samplerMaxSpp: { min: 1, p10: 1, p50: 1, p90: 1, max: 1, n: 22 } };
+const f14Flags = evaluateFlags(mockFrames, emptyTextAnalysis, [], [], [], [], degCal);
+assert(!f14Flags.some((f) => f.rule === 'F14' || f.rule === 'sampler_saturation'), 'F14 does not fire on degenerate max=1 calibration (falls back to 324)');
 
 // -------------------------------------------------------------
 // Summary

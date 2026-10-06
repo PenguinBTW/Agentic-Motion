@@ -198,8 +198,19 @@ export async function runCompare(page: Page, argv: string[] = []): Promise<void>
       cvSplit.height = H;
       const ctxW = cvSplit.getContext('2d')!;
 
-      // Draw Reference base
-      ctxW.drawImage(imgB, 0, 0, W, H);
+      // Draw Reference base (placeholder when ref unavailable — never self-compare silently)
+      if (isRefLive) {
+        ctxW.drawImage(imgB, 0, 0, W, H);
+      } else {
+        ctxW.fillStyle = '#141416';
+        ctxW.fillRect(0, 0, W, H);
+        ctxW.fillStyle = '#FF4D12';
+        ctxW.font = 'bold 28px monospace';
+        ctxW.fillText('REFERENCE UNAVAILABLE', 64, H / 2 - 8);
+        ctxW.font = '18px monospace';
+        ctxW.fillStyle = '#A0A0AA';
+        ctxW.fillText('Example project not reachable — split wipe skipped.', 64, H / 2 + 28);
+      }
 
       // Draw Active with diagonal clip path
       ctxW.save();

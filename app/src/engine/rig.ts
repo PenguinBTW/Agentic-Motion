@@ -37,6 +37,7 @@ export class CameraRig {
 
   // Analytical closed-form trauma impulses (preserves f(t) sub-frame determinism)
   private impulses: TraumaImpulse[] = [];
+  private _degenerateWarned = false;
 
   // Arc-length parameterized spline waypoints
   private waypoints: CameraWaypoint[] = [];
@@ -165,9 +166,12 @@ export class CameraRig {
     const dy = this.target[1] - p[1];
     const dz = this.target[2] - p[2];
     const rawLen = Math.hypot(dx, dy, dz);
-    if (rawLen < 1e-6) {
-      // Coincident waypoint — hold last forward to avoid zero-basis NaN.
+    if (rawLen < 1e-6 && !this._degenerateWarned) {
+      // Coincident waypoint — hold +Z forward to avoid zero-basis NaN.
       console.warn('[rig] position==target, holding +Z forward to avoid degenerate basis');
+      this._degenerateWarned = true;
+    } else if (rawLen >= 1e-6) {
+      this._degenerateWarned = false;
     }
     const len = rawLen < 1e-6 ? 1.0 : rawLen;
     const Fw: V3 = rawLen < 1e-6 ? [0, 0, 1] : [dx / len, dy / len, dz / len];

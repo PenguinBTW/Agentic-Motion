@@ -286,13 +286,14 @@ try {
         const eRes = computeMotionEnergy(luma, lumas[i - 1]!);
         frameEs.push(eRes.E);
         const flow = computePhaseCorrelationFlow(luma, lumas[i - 1]!, FPS, 480, 270, contrast);
-        // Invalid (flat-frame) flow returns 0 — do not let phase noise pollute calibration means.
-        frameDx.push(flow.invalid ? 0 : flow.flow_dx);
-        frameDy.push(flow.invalid ? 0 : flow.flow_dy);
+        // Invalid (flat-frame) flow excluded from means — tracked via flowInvalidFrac below.
+        // Pushing 0 would bias means toward 0 on static plates.
+        if (!flow.invalid) {
+          frameDx.push(flow.flow_dx);
+          frameDy.push(flow.flow_dy);
+        }
       } else {
         frameEs.push(0);
-        frameDx.push(0);
-        frameDy.push(0);
       }
 
       const { signalPct, brightNonsignalPct } = computeSignalMetrics(fBuf, 480, 270);
@@ -307,12 +308,12 @@ try {
       frameShims.push(computeShimmer(lumas[i - 1]!, lumas[i]!, lumas[i + 1]!, edgeMaps[i]!));
     }
 
-    // Plate aggregates
-    const eMean = frameEs.reduce((a, b) => a + b, 0) / frameEs.length;
+    // Plate aggregates (flow means exclude invalid flat frames; empty → 0 with n documented)
+    const eMean = frameEs.length ? frameEs.reduce((a, b) => a + b, 0) / frameEs.length : 0;
     const sortedE = [...frameEs].sort((a, b) => a - b);
-    const eP95 = sortedE[Math.floor(sortedE.length * 0.95)] ?? eMean;
-    const dxMean = frameDx.reduce((a, b) => a + b, 0) / frameDx.length;
-    const dyMean = frameDy.reduce((a, b) => a + b, 0) / frameDy.length;
+    const eP95 = sortedE.length ? sortedE[Math.floor(sortedE.length * 0.95)] ?? eMean : eMean;
+    const dxMean = frameDx.length ? frameDx.reduce((a, b) => a + b, 0) / frameDx.length : 0;
+    const dyMean = frameDy.length ? frameDy.reduce((a, b) => a + b, 0) / frameDy.length : 0;
     const lumaMean = frameLumas.reduce((a, b) => a + b, 0) / frameLumas.length;
     const contMean = frameConts.reduce((a, b) => a + b, 0) / frameConts.length;
     const edgeMean = frameEdges.reduce((a, b) => a + b, 0) / frameEdges.length;
@@ -344,7 +345,7 @@ try {
     const windowDur = Math.max(0.001, to - from);
     allMetrics.cutRatePerSec!.push(plateCuts / windowDur);
 
-    // Audio hit responses in window
+    // Audio hit responses in window (skip when no baseline — pushing 1.0 would fake "no response")
     if (audioData?.onsets?.kick) {
       const kicksInWindow = (audioData.onsets.kick as [number, number][]).filter(([t]) => t >= from && t <= to);
       for (const [kT, kStrength] of kicksInWindow) {
@@ -352,8 +353,7 @@ try {
         if (kIdx >= 2 && kIdx < frameCount - 2) {
           const base = (frameEs[kIdx - 2]! + frameEs[kIdx - 1]!) / 2;
           const peak = Math.max(frameEs[kIdx]!, frameEs[kIdx + 1]!, frameEs[kIdx + 2]!);
-          const ratio = base > 0.0001 ? peak / base : 1.0;
-          allMetrics.kickResponseRatioMedian!.push(ratio);
+          if (base > 0.0001) allMetrics.kickResponseRatioMedian!.push(peak / base);
         }
       }
     }

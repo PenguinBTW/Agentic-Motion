@@ -105,18 +105,26 @@ export class CompositorGraph {
   }
 
   createLayer(name: string, def: Omit<GraphLayerDef, 'name'>): this {
+    if (def.post) console.warn(`[graph] Layer '${name}' post is accepted but scoped-post is not implemented in v0.5 (no-op).`);
+    if (def.matte && !this.layers.some((l) => l.name === def.matte!.source) && !this.layerRTs.has(def.matte.source)) {
+      console.warn(`[graph] Layer '${name}' matte source '${def.matte.source}' not yet registered — falls back to unmatted path.`);
+    }
     this.layers.push({ name, ...def });
     return this;
   }
 
   clear(): void {
     this.layers = [];
+    for (const rt of this.layerRTs.values()) rt.dispose();
+    this.layerRTs.clear();
   }
 
-  private getRT(name: string): THREE.WebGLRenderTarget {
+  private getRT(name: string, depth = false): THREE.WebGLRenderTarget {
     let rt = this.layerRTs.get(name);
     if (!rt) {
-      rt = makeRT(W, H, { depthBuffer: true });
+      // Depth only where needed (layer RTs keep depth; accum/matte are depthless).
+      const isAux = name.startsWith('__');
+      rt = makeRT(W, H, { depthBuffer: isAux ? false : depth });
       this.layerRTs.set(name, rt);
     }
     return rt;
@@ -133,7 +141,7 @@ export class CompositorGraph {
 
     // 1. Render all base layers into their allocated targets
     for (const l of this.layers) {
-      const rt = this.getRT(l.name);
+      const rt = this.getRT(l.name, true);
       const prevRT = renderer.getRenderTarget();
       renderer.setRenderTarget(rt);
       renderer.setClearColor(0x000000, 0);
@@ -157,7 +165,7 @@ export class CompositorGraph {
 
     for (let i = 0; i < this.layers.length; i++) {
       const l = this.layers[i]!;
-      const layerRT = this.getRT(l.name);
+      const layerRT = this.getRT(l.name, true);
       let sourceTex = layerRT.texture;
 
       // Apply track matte if specified

@@ -189,12 +189,21 @@ export class AnalyticalParticles {
   clear(): void {
     this.count = 0;
     this.geo.instanceCount = 0;
+    this.emitterIds.clear();
+    this.emitterIndex = 0;
   }
 
+  private emitterIds = new Set<string>();
+  private emitterIndex = 0;
+
   /**
-   * Add a procedural emitter with closed-form seed generation and direction-aligned velocity cone
+   * Add a procedural emitter with closed-form seed generation and direction-aligned velocity cone.
+   * NOTE: gravity is scene-global (single shared uniform). Per-emitter gravity overwrites.
    */
   addEmitter(id: string, opts: ParticleEmitterOpts = {}): this {
+    if (this.emitterIds.has(id)) console.warn(`[particles] Duplicate emitter id '${id}' — particles will stack. Use unique ids.`);
+    this.emitterIds.add(id);
+    const eIdx = this.emitterIndex++;
     const emitterCount = opts.capacity ?? 256;
     const origin = opts.origin ?? [0, 0, 0];
     const dir = opts.direction ?? [0, 1, 0];
@@ -237,7 +246,8 @@ export class AnalyticalParticles {
     for (let i = 0; i < emitterCount; i++) {
       if (this.count >= this.capacity) break;
       const idx = this.count++;
-      const s = this.seed + idx * 0.137;
+      // Seeded by (constructor seed, emitter index, particle i) — decorrelates emitters.
+      const s = this.seed + eIdx * 101.7 + idx * 0.137;
 
       // Seeded jitter on origin (seeded by constructor seed + particle index)
       const jitter = 0.1;
@@ -249,9 +259,9 @@ export class AnalyticalParticles {
       this.originArr[idx * 3 + 1] = oy;
       this.originArr[idx * 3 + 2] = oz;
 
-      // Cone velocity rotated along direction D
-      const theta = (Math.sin(i * 93.123) * 0.5 + 0.5) * spread;
-      const phi = (Math.cos(i * 37.456) * 0.5 + 0.5) * Math.PI * 2;
+      // Cone velocity rotated along direction D (seeded — decorrelates emitters)
+      const theta = (Math.sin((i + s) * 93.123) * 0.5 + 0.5) * spread;
+      const phi = (Math.cos((i + s) * 37.456) * 0.5 + 0.5) * Math.PI * 2;
       const sinT = Math.sin(theta), cosT = Math.cos(theta);
 
       const vx = (D[0] * cosT + (R[0] * Math.cos(phi) + U[0] * Math.sin(phi)) * sinT) * speed;
@@ -262,8 +272,8 @@ export class AnalyticalParticles {
       this.velArr[idx * 3 + 1] = vy;
       this.velArr[idx * 3 + 2] = vz;
 
-      // Staggered birth offsets uniformly distributed across lifetime
-      const birthOffset = (i / emitterCount) * lifetime;
+      // Staggered birth offsets uniformly distributed across lifetime (seeded offset per emitter)
+      const birthOffset = ((i + (eIdx * 0.61803398875) % 1) / emitterCount) * lifetime;
       this.lifeArr[idx * 2 + 0] = birthOffset;
       this.lifeArr[idx * 2 + 1] = lifetime;
 
@@ -294,16 +304,29 @@ export class AnalyticalParticles {
     const g = gravity ? Math.hypot(gravity[0], gravity[1], gravity[2]) : 0.4;
     // Bounds include ballistic term 0.5*g*t² + turbulence wander + particle size.
     // Note: mesh.frustumCulled=false currently disables culling; bounds kept accurate
-    // for future use and for diagnostics.
+    // for future use and for diagnostics. Union across emitters (last-wins replaced).
     const maxRadius = speed * lifetime + 0.5 * g * lifetime * lifetime + turbulence * lifetime + size + 1.0;
-    this.geo.boundingSphere = new THREE.Sphere(
-      new THREE.Vector3(origin[0], origin[1], origin[2]),
-      maxRadius
-    );
-    this.geo.boundingBox = new THREE.Box3(
-      new THREE.Vector3(origin[0] - maxRadius, origin[1] - maxRadius, origin[2] - maxRadius),
-      new THREE.Vector3(origin[0] + maxRadius, origin[1] + maxRadius, origin[2] + maxRadius)
-    );
+    const center = new THREE.Vector3(origin[0], origin[1], origin[2]);
+    if (!this.geo.boundingSphere) {
+      this.geo.boundingSphere = new THREE.Sphere(center.clone(), maxRadius);
+      this.geo.boundingBox = new THREE.Box3(
+        new THREE.Vector3(origin[0] - maxRadius, origin[1] - maxRadius, origin[2] - maxRadius),
+        new THREE.Vector3(origin[0] + maxRadius, origin[1] + maxRadius, origin[2] + maxRadius)
+      );
+    } else {
+      // Expand existing sphere/box to enclose new emitter.
+      const s = this.geo.boundingSphere;
+      const d = center.distanceTo(s.center);
+      const need = d + maxRadius;
+      if (need > s.radius) {
+        // Move center toward new emitter proportionally and grow to enclose.
+        const t = maxRadius / need;
+        s.center.lerp(center, t);
+        s.radius = need;
+      }
+      this.geo.boundingBox!.expandByPoint(new THREE.Vector3(origin[0] - maxRadius, origin[1] - maxRadius, origin[2] - maxRadius));
+      this.geo.boundingBox!.expandByPoint(new THREE.Vector3(origin[0] + maxRadius, origin[1] + maxRadius, origin[2] + maxRadius));
+    }
   }
 
   /**

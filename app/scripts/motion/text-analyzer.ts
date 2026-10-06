@@ -81,15 +81,18 @@ export function analyzeTextProbes(
       let matchedRunIdx = -1;
       let minDist = 200.0;
 
-      for (let i = 0; i < remainingActive.length; i++) {
-        const ar = remainingActive[i]!;
-        const lastRec = ar.records[ar.records.length - 1]!;
-        // Allow a small gap (gap <= 2) to prevent transient frame drops from splitting runs
-        if (ar.normalizedText === norm && fIdx >= lastRec.frameIdx + 1 && fIdx <= lastRec.frameIdx + 2) {
-          const d = Math.hypot(rec.cx - lastRec.cx, rec.cy - lastRec.cy);
-          if (d < minDist) {
-            minDist = d;
-            matchedRunIdx = i;
+      // Punct-only records normalize to "" — never merge those (distinct runs).
+      if (norm !== "") {
+        for (let i = 0; i < remainingActive.length; i++) {
+          const ar = remainingActive[i]!;
+          const lastRec = ar.records[ar.records.length - 1]!;
+          // Allow a small gap (gap <= 2) to prevent transient frame drops from splitting runs
+          if (ar.normalizedText === norm && ar.normalizedText !== "" && fIdx >= lastRec.frameIdx + 1 && fIdx <= lastRec.frameIdx + 2) {
+            const d = Math.hypot(rec.cx - lastRec.cx, rec.cy - lastRec.cy);
+            if (d < minDist) {
+              minDist = d;
+              matchedRunIdx = i;
+            }
           }
         }
       }
@@ -142,14 +145,17 @@ export function analyzeTextProbes(
     }
   }
 
-  // Finalize run statistics
+  // Finalize run statistics (travel = path length / dur, not endpoint distance,
+  // so oscillating paths aren't underestimated)
   for (const r of runs) {
     let sumH = 0;
     for (const rec of r.records) sumH += rec.hPct;
     r.mean_hPct = sumH / r.records.length;
-    const firstRec = r.records[0]!, lastRec = r.records[r.records.length - 1]!;
-    const travel = Math.hypot(lastRec.cx - firstRec.cx, lastRec.cy - firstRec.cy);
-    r.travel_px_s = r.dur > 0 ? travel / r.dur : 0;
+    let path = 0;
+    for (let i = 1; i < r.records.length; i++) {
+      path += Math.hypot(r.records[i]!.cx - r.records[i - 1]!.cx, r.records[i]!.cy - r.records[i - 1]!.cy);
+    }
+    r.travel_px_s = r.dur > 0 ? path / r.dur : 0;
   }
 
   // Assign spatial slots (bbox centres within 40 px)

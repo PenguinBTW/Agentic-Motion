@@ -99,7 +99,7 @@ export class SceneGraph {
       ];
 
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      let anyVisible = false;
+      let anyVisible = false, anyClipped = false;
 
       for (const c of corners) {
         const v = new THREE.Vector3(c[0], c[1], c[2]).applyMatrix4(worldMat);
@@ -110,10 +110,19 @@ export class SceneGraph {
           minY = Math.min(minY, proj[1]);
           maxX = Math.max(maxX, proj[0]);
           maxY = Math.max(maxY, proj[1]);
+        } else {
+          anyClipped = true;
         }
       }
 
       if (anyVisible) {
+        // Partial near-plane clip: visible-only corners underestimate. Expand conservatively
+        // to viewport edges so F04/F05 never miss (may over-flag — safe direction for Tier A).
+        // Full edge-to-near-plane interpolation (clipSeg) is future work.
+        if (anyClipped) {
+          minX = Math.min(minX, 0); minY = Math.min(minY, 0);
+          maxX = Math.max(maxX, w); maxY = Math.max(maxY, h);
+        }
         e.screenBounds = [minX, minY, maxX, maxY];
       } else {
         e.screenBounds = undefined;

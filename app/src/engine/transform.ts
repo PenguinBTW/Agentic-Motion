@@ -153,14 +153,16 @@ export class TransformNode {
   }
 
   /**
-   * World position of the designated pivot / anchor point
-   * (local origin offset by -anchor*size, transformed by full world matrix).
+   * World position of the designated pivot / anchor point.
+   * updateMatrix bakes T(-anchor*size) into worldMatrix, so the pivot is
+   * worldMatrix * (+anchor*size) == parent * position. (M*(0,0,0) is the
+   * unanchored origin, not the pivot.)
    */
   getPivotWorldPosition(): V3 {
     this.updateMatrix();
-    const px = -this.anchor[0] * this.size[0];
-    const py = -this.anchor[1] * this.size[1];
-    const pz = -this.anchor[2] * this.size[2];
+    const px = this.anchor[0] * this.size[0];
+    const py = this.anchor[1] * this.size[1];
+    const pz = this.anchor[2] * this.size[2];
     const v = new THREE.Vector3(px, py, pz);
     v.applyMatrix4(this.getWorldMatrix());
     return [v.x, v.y, v.z];

@@ -12,7 +12,7 @@ export interface ReportContext {
   windowTo: number;
   fps: number;
   scale: number;
-  samples: number | string;
+  samples: number | string | { min: number; max: number; tol: number };
   shutter: number;
   frameCount: number;
   wallClockSec: number;
@@ -316,25 +316,31 @@ export function generateReportMarkdown(
     if (durSeg >= CONFIG.dead_motion_s) staticSegments.push({ t0: frames[sStart]!.t, t1: frames[frames.length - 1]!.t, kind: 'dead-motion', eMean: eSum / (frames.length - sStart) });
   }
 
-  // Blank runs
+  // Blank runs (thresholds from CONFIG to avoid drift; reset on kind change)
   let bStart = -1, bKind = '';
   for (let i = 0; i < frames.length; i++) {
     const f = frames[i]!;
-    const isBlk = f.luma < 0.02, isWht = f.luma > 0.98 && f.contrast < 0.02;
+    const isBlk = f.luma < CONFIG.blank_black_luma, isWht = f.luma > CONFIG.blank_white_luma && f.contrast < CONFIG.blank_white_max_contrast;
     if (isBlk || isWht) {
       const k = isBlk ? 'blank-dark' : 'blank-light';
       if (bStart < 0) { bStart = i; bKind = k; }
+      else if (k !== bKind) {
+        // Kind changed without gap (black→white) — close previous run, start new.
+        const durPrev = frames[i - 1]!.t - frames[bStart]!.t;
+        if (durPrev >= CONFIG.blank_max_run_s) staticSegments.push({ t0: frames[bStart]!.t, t1: frames[i - 1]!.t, kind: bKind, eMean: 0.0 });
+        bStart = i; bKind = k;
+      }
     } else {
       if (bStart >= 0) {
         const durSeg = frames[i - 1]!.t - frames[bStart]!.t;
-        if (durSeg >= 0.3) staticSegments.push({ t0: frames[bStart]!.t, t1: frames[i - 1]!.t, kind: bKind, eMean: 0.0 });
+        if (durSeg >= CONFIG.blank_max_run_s) staticSegments.push({ t0: frames[bStart]!.t, t1: frames[i - 1]!.t, kind: bKind, eMean: 0.0 });
         bStart = -1;
       }
     }
   }
   if (bStart >= 0) {
     const durSeg = frames[frames.length - 1]!.t - frames[bStart]!.t;
-    if (durSeg >= 0.3) staticSegments.push({ t0: frames[bStart]!.t, t1: frames[frames.length - 1]!.t, kind: bKind, eMean: 0.0 });
+    if (durSeg >= CONFIG.blank_max_run_s) staticSegments.push({ t0: frames[bStart]!.t, t1: frames[frames.length - 1]!.t, kind: bKind, eMean: 0.0 });
   }
 
   const cappedStatic = staticSegments.slice(0, ctx.topN);
@@ -523,7 +529,11 @@ ${evidenceTable}
       energyMean: frames.length ? frames.reduce((a, b) => a + b.E, 0) / frames.length : 0,
       energyP95: frames.length ? frames.reduce((a, b) => a + b.E_p95, 0) / frames.length : 0,
       kickResponseRatioMedian: hits.length ? (hits.map((h) => h.ratio).sort((a, b) => a - b)[Math.floor(hits.length / 2)] ?? 1.0) : 1.0,
-      textMaxSizeRatioMedian: words.length ? (Math.max(...words.map((w) => w.peak_hPct)) / Math.max(0.1, Math.min(...words.filter((w) => w.peak_hPct > 0).map((w) => w.peak_hPct)))) : 1.0,
+      textMaxSizeRatioMedian: (() => {
+        const sized = words.filter((w) => w.peak_hPct > 0).map((w) => w.peak_hPct);
+        if (sized.length < 2) return 1.0;
+        return Math.max(...sized)! / Math.max(0.1, Math.min(...sized)!);
+      })(),
       signalPct: frames.length ? frames.reduce((a, b) => a + b.signal_pct, 0) / frames.length : 0,
       brightNonsignalPct: frames.length ? frames.reduce((a, b) => a + b.bright_nonsignal_pct, 0) / frames.length : 0,
       otherPct: frames.length ? frames.reduce((a, b) => a + (b.other_pct ?? 0), 0) / frames.length : 0,
