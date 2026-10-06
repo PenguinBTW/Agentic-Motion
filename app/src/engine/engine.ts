@@ -6,7 +6,7 @@ import { Lyrics } from './lyrics';
 import { type TimelineDriver, ClockDriver, AudioDriver } from './driver';
 import { Compositor, FSPass, W, H, PW, PH, SCALE, SS_TAP, makeRT, clearRT } from './gl';
 import { DEFAULT_POST, Post, SHOULDER_GLSL, type PostParams } from './post';
-import { Hud, PDoom, type Caption } from './hud';
+import { Hud, MetricReadout, PDoom, type Caption } from './hud';
 import { LineBatch } from './lines';
 import type { Frame, Scene, SceneClass, SceneCtx, PostOverrides } from './scene';
 import { loadFonts } from './type';
@@ -181,8 +181,8 @@ export class Engine {
       const d = e.caption!.delay ?? 0.3;
       return { start: e.start + d, end: e.start + d + (e.caption!.dur ?? 4.5), fig: e.caption!.fig, text: e.caption!.text };
     });
-    const pdoom = (this.lyrics && this.lyrics.words && this.lyrics.words.length > 0) ? new PDoom(this.lyrics) : null;
-    this.hud = new Hud(pdoom, captions);
+    const readout = (this.lyrics && this.lyrics.words && this.lyrics.words.length > 0) ? new PDoom(this.lyrics) : new MetricReadout([{ t: -1, v: 0.0 }], 'METRIC');
+    this.hud = new Hud(readout, captions);
     const entries = only ? this.timeline.filter(only) : this.timeline;
     await Promise.all(entries.map((e) => this.loadEntry(e)));
   }
@@ -241,7 +241,8 @@ export class Engine {
   render(t: number, dt = 1 / 60, toScreen = true, samples: number | AdaptiveSampling = 1, shutter = 0.5): number {
     const r = this.renderer;
     LineBatch.frameSegs = 0;
-    if (typeof (window as any).__pdoom !== 'undefined') (window as any).__pdoom.recordText = true;
+    const bridgeRef = (window as any).__motion || (window as any).__pdoom;
+    if (bridgeRef) bridgeRef.recordText = true;
     const seeked = this.lastT < 0 || t < this.lastT - 1e-6 || t - this.lastT > Math.max(0.25, dt * 4);
     this.lastT = t;
     let outTex: THREE.Texture;
@@ -271,7 +272,8 @@ export class Engine {
       let nearest = Infinity;
       // sub-frame k at shutter offset u (-0.5..0.5), summed into `into`; `step` = the sub-frame spacing
       const sub = (k: number, u: number, into: THREE.WebGLRenderTarget, step: number) => {
-        if (typeof (window as any).__pdoom !== 'undefined') (window as any).__pdoom.recordText = (k === 0);
+        const subBridge = (window as any).__motion || (window as any).__pdoom;
+        if (subBridge) subBridge.recordText = (k === 0);
         SS_TAP.value = cycle ? (k + (k >> 2)) % 4 : -1;
         // (clamped at 0: before the song no scene is active, and frame 0 would come out half black)
         const res = this.composite(Math.max(0, t + dt * shutter * u), step, seeked && k === 0);
@@ -308,8 +310,17 @@ export class Engine {
     }
     this.lastSamples = n;
     this.lastSegs = LineBatch.frameSegs;
-    if (typeof (window as any).__pdoom !== 'undefined') (window as any).__pdoom.recordText = true;
-    const hudTex = this.hud.draw(t, { opacity: this.hudOff ? 0 : post.hud, frame: post.frame, readout: post.pdoom, paper: post.paper, pdoomOverride: post.pdoomText, corruption: post.hudCorruption });
+    const postBridge = (window as any).__motion || (window as any).__pdoom;
+    if (postBridge) postBridge.recordText = true;
+    const hudTex = this.hud.draw(t, {
+      opacity: this.hudOff ? 0 : post.hud,
+      frame: post.frame,
+      readout: post.metricReadout ?? post.pdoom,
+      paper: post.paper,
+      metricOverride: post.metricText,
+      pdoomOverride: post.metricText ?? post.pdoomText,
+      corruption: post.hudCorruption,
+    });
     this.post.render(r, outTex, hudTex, this.finalRT, post, t);
     this.lastPost = post;
     if (toScreen) {

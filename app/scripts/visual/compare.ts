@@ -41,10 +41,13 @@ async function isReachable(url: string): Promise<boolean> {
 
 export async function runCompare(page: Page, argv: string[] = []): Promise<void> {
   const opts = parseCompareArgs(argv);
-  const activeT = opts.t ?? 27.50;
-  const activeScene = opts.scene ?? 'boundary';
-  const refScene = opts.refScene ?? 'loss';
-  const refT = opts.refT ?? 14.20;
+  const tl: { id: string; start: number; end: number }[] = await page.evaluate(() => (window as any).__motion?.timeline || (window as any).__pdoom?.timeline || []);
+  const defaultScene = tl[0]?.id ?? 'demo';
+  const defaultT = tl[0] ? (tl[0].start + tl[0].end) / 2 : 2.50;
+  const activeT = opts.t ?? defaultT;
+  const activeScene = opts.scene ?? defaultScene;
+  const refScene = opts.refScene ?? (tl[1]?.id ?? activeScene);
+  const refT = opts.refT ?? (tl[1] ? (tl[1].start + tl[1].end) / 2 : activeT);
   const port = opts.port ?? 5189;
 
   const ROOT = path.resolve(import.meta.dir, '../../..');
@@ -55,8 +58,8 @@ export async function runCompare(page: Page, argv: string[] = []): Promise<void>
   console.log(`[compare] Benchmarking active [${activeScene} @ ${activeT.toFixed(2)}s] vs Example [${refScene} @ ${refT.toFixed(2)}s]...`);
 
   // 1. Capture Active Still from current page
-  await page.evaluate(([t]) => (window as any).__pdoom.still(t, 1, 0), [activeT]);
-  const activeBase64: string = await page.evaluate(() => (window as any).__pdoom.png());
+  await page.evaluate(([t]) => { const b = (window as any).__motion || (window as any).__pdoom; return b?.still(t, 1, 0); }, [activeT]);
+  const activeBase64: string = await page.evaluate(() => { const b = (window as any).__motion || (window as any).__pdoom; return b?.png(); });
 
   // 2. Capture Reference Still from Example project
   const REF_APP = path.resolve(import.meta.dir, '../../../../Example project/app');
@@ -75,7 +78,7 @@ export async function runCompare(page: Page, argv: string[] = []): Promise<void>
           cwd: REF_APP,
           stdout: 'ignore',
           stderr: 'ignore',
-          env: { ...process.env, PDOOM_NO_HMR: '1' },
+          env: { ...process.env, MOTION_NO_HMR: '1', PDOOM_NO_HMR: '1' },
         });
         for (let i = 0; i < 30; i++) {
           await Bun.sleep(150);
@@ -92,9 +95,9 @@ export async function runCompare(page: Page, argv: string[] = []): Promise<void>
           }
           const refPage = await refBrowser.newPage({ viewport: { width: 1920, height: 1080 } });
           await refPage.goto(`${refUrl}/?export=1&only=${refScene}`);
-          await refPage.waitForFunction(() => (window as any).__pdoom?.ready, null, { timeout: 15000 });
-          await refPage.evaluate(([t]) => (window as any).__pdoom.still(t, 1, 0), [refT]);
-          refBase64 = await refPage.evaluate(() => (window as any).__pdoom.png());
+          await refPage.waitForFunction(() => (window as any).__motion?.ready || (window as any).__pdoom?.ready, null, { timeout: 15000 });
+          await refPage.evaluate(([t]) => ((window as any).__motion || (window as any).__pdoom).still(t, 1, 0), [refT]);
+          refBase64 = await refPage.evaluate(() => ((window as any).__motion || (window as any).__pdoom).png());
           if (refBase64) refAvailable = true;
         } catch (err: any) {
           console.warn(`[compare] Warning: Could not capture reference plate directly: ${err.message}`);

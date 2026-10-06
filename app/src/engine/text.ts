@@ -1,6 +1,6 @@
 // Universal Kinetic Typography Engine (KineticText)
 // Declarative text layout, 3D world anchoring, character/word staggered animators,
-// ink knockout halos, and direct telemetry emission bridge to window.__pdoom.textProbes.
+// ink knockout halos, and direct telemetry emission bridge to window.__motion.textProbes.
 import * as THREE from 'three';
 import { ViewportSpace } from './viewport';
 import { type V3 } from './camera3d';
@@ -253,12 +253,12 @@ export class KineticText {
 
   /**
    * Direct Telemetry Emission Bridge
-   * Writes bounding boxes and text metrics directly to window.__pdoom.textProbes.
+   * Writes bounding boxes and text metrics directly to window.__motion.textProbes.
    * Protected against empty lines and preview memory leaks.
    */
   syncTelemetry(t: number, screenX = this.anchorPos[0], screenY = this.anchorPos[1]): void {
     if (typeof window === 'undefined') return;
-    const P = (window as any).__pdoom;
+    const P = (window as any).__motion || (window as any).__pdoom;
     if (!P || !P.textProbes || P.recordText === false) return;
 
     const effFontSize = this.style.fontSize * (this.is3DAnchored ? this.depthScale : 1.0);
@@ -366,8 +366,8 @@ export class KineticText {
 
     // Only emit direct telemetry if Canvas2D text probe hook is NOT active
     // This prevents double-counting and eliminates false F04 typographic collisions.
-    const P = typeof window !== 'undefined' ? (window as any).__pdoom : null;
-    const hookActive = typeof window !== 'undefined' && Boolean((window as any).__textHookActive || (window as any).__pdoom_hookActive);
+    const P = typeof window !== 'undefined' ? ((window as any).__motion || (window as any).__pdoom) : null;
+    const hookActive = typeof window !== 'undefined' && Boolean((window as any).__textHookActive || (window as any).__motion_hookActive || (window as any).__pdoom_hookActive);
     if (P?.probe && P.recordText !== false && !hookActive) {
       this.syncTelemetry(t, x, y);
     }

@@ -38,7 +38,7 @@ export async function runStitch(page: Page, argv: string[] = []): Promise<void> 
   let cutT = opts.t;
   if (cutT === undefined) {
     const tl: { id: string; start: number; end: number }[] = await page.evaluate(
-      () => (window as any).__pdoom?.timeline || []
+      () => (window as any).__motion?.timeline || (window as any).__pdoom?.timeline || []
     );
     if (opts.toScene && tl.length > 0) {
       const match = tl.find((e) => e.id === opts.toScene);
@@ -47,7 +47,7 @@ export async function runStitch(page: Page, argv: string[] = []): Promise<void> 
       const match = tl.find((e) => e.id === opts.fromScene);
       if (match) cutT = match.end;
     }
-    if (cutT === undefined) cutT = 25.60; // fallback default
+    if (cutT === undefined) cutT = tl.length > 1 ? tl[1]!.start : (tl[0] ? (tl[0].start + tl[0].end) / 2 : 2.50);
   }
 
   const ROOT = path.resolve(import.meta.dir, '../../..');
@@ -82,7 +82,7 @@ export async function runStitch(page: Page, argv: string[] = []): Promise<void> 
     summary: any;
   } = await page.evaluate(
     async ({ tA, tB, stripTimes, fromSceneName, toSceneName }: { tA: number; tB: number; stripTimes: number[]; fromSceneName: string; toSceneName: string }) => {
-      const P = (window as any).__pdoom;
+      const P = (window as any).__motion || (window as any).__pdoom;
       const W = P.width ?? 1920;
       const H = P.height ?? 1080;
 

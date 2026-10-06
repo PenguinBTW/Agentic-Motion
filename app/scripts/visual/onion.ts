@@ -38,7 +38,7 @@ export async function runOnion(page: Page, argv: string[] = []): Promise<void> {
 
   if (opts.from === undefined && opts.to === undefined && opts.scene) {
     const tl: { id: string; start: number; end: number }[] = await page.evaluate(
-      () => (window as any).__pdoom?.timeline || []
+      () => (window as any).__motion?.timeline || (window as any).__pdoom?.timeline || []
     );
     const match = tl.find((e) => e.id === opts.scene);
     if (match) {
@@ -58,7 +58,11 @@ export async function runOnion(page: Page, argv: string[] = []): Promise<void> {
   } else if (to !== undefined && from === undefined) {
     from = Math.max(0, to - (opts.window ?? 0.5));
   } else {
-    const centerT = opts.t ?? 10.0;
+    const tl: { id: string; start: number; end: number }[] = await page.evaluate(
+      () => (window as any).__motion?.timeline || (window as any).__pdoom?.timeline || []
+    );
+    const defaultCenter = tl[0] ? (tl[0].start + tl[0].end) / 2 : 2.5;
+    const centerT = opts.t ?? defaultCenter;
     const halfWin = (opts.window ?? 0.5) / 2;
     from = Math.max(0, centerT - halfWin);
     to = centerT + halfWin;
@@ -80,7 +84,7 @@ export async function runOnion(page: Page, argv: string[] = []): Promise<void> {
   // Render each frame and composite in browser context
   const result: { dataUrl: string; summary: any } = await page.evaluate(
     async ({ times, sceneName }: { times: number[]; sceneName: string }) => {
-      const P = (window as any).__pdoom;
+      const P = (window as any).__motion || (window as any).__pdoom;
       const W = P.width ?? 1920;
       const H = P.height ?? 1080;
       const N = times.length;

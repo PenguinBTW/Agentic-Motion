@@ -79,7 +79,14 @@ export async function loadFonts(): Promise<void> {
 export function ot(family: string): opentype.Font {
   let f = otCache.get(family);
   if (!f) {
-    const buf = bufCache.get(family);
+    let buf = bufCache.get(family);
+    if (!buf) {
+      const fallbackFamily = bufCache.keys().next().value;
+      if (fallbackFamily) {
+        console.warn(`[type] Font '${family}' unavailable; substituting fallback face '${fallbackFamily}'.`);
+        buf = bufCache.get(fallbackFamily);
+      }
+    }
     if (!buf) throw new Error(`font not loaded: ${family}`);
     f = opentype.parse(buf);
     otCache.set(family, f);

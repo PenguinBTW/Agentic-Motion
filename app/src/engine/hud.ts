@@ -1,6 +1,5 @@
-// Global overlay: the crop-mark frame and the (normally hidden) corner P(doom) readout, plus the
-// legacy plate captions. The frame only appears at the bookends: the opening's sheet (the prompt's
-// canvas) and the outro's regenerate/loop — the rest of the video runs full-bleed.
+// Universal Technical HUD overlay: crop-mark frame, configurable technical metric readout,
+// and scene captions/metadata. Full-bleed or framed modes supported across all genres.
 import { Layer2D, W, H } from './gl';
 import { rgba } from './palette';
 import { F, font } from './type';
@@ -9,42 +8,57 @@ import { clamp, ease, hash, lerp, noise1, prog, smoothstep } from './util';
 
 export interface Caption { start: number; end: number; fig: string; text: string }
 
-/** P(doom) steps: each sung "P(doom)" raises the estimate. */
-export class PDoom {
+/** Generic technical metric tracker for telemetry HUD overlays. */
+export class MetricReadout {
   steps: { t: number; v: number }[] = [];
-  constructor(lyrics: Lyrics) {
-    const hits = lyrics.words.filter((w) => /p[-(\s]?doom/i.test(w.w)).map((w) => w.start + 0.06);
-    const vals = [0.15, 0.42, 0.81, 0.99];
-    this.steps = [{ t: -1, v: 0.02 }, ...hits.map((t, i) => ({ t, v: vals[i] ?? 0.99 }))];
+  label: string;
+
+  constructor(steps: { t: number; v: number }[] = [{ t: -1, v: 0.0 }], label = 'METRIC') {
+    this.steps = steps;
+    this.label = label;
   }
-  /** Value at t with the roll animation of each step (~0.9 s) and slow drift between steps. */
+
+  /** Value at t with smooth progression (~0.9 s) and slow drift between keypoints. */
   value(t: number): number {
+    if (!this.steps.length) return 0;
     let i = 0;
     while (i + 1 < this.steps.length && this.steps[i + 1]!.t <= t) i++;
     const cur = this.steps[i]!, prev = this.steps[Math.max(0, i - 1)]!;
     const k = i === 0 ? 1 : prog(t, cur.t, cur.t + 0.9, ease.outExpo);
     const base = prev.v + (cur.v - prev.v) * k;
     const next = this.steps[i + 1];
-    // slow creep toward the next value (never more than 20% of the gap)
+    // slow creep toward next target value
     const creep = next ? (next.v - cur.v) * 0.2 * smoothstep(cur.t + 1, next.t, t) : 0;
     const jitter = noise1(t * 3.1, 7) * 0.004 * (1 - k * 0.5);
     return clamp(base + creep + jitter, 0, 1);
   }
-  /** 0..1 flash envelope right after a step. */
+
+  /** 0..1 flash envelope right after a step update. */
   flash(t: number): number {
     let f = 0;
     for (const s of this.steps) if (t >= s.t && s.t > 0) f = Math.max(f, Math.pow(0.5, (t - s.t) / 0.35));
     return f;
   }
+
   lastStep(t: number) { let s = this.steps[0]!; for (const x of this.steps) if (x.t <= t) s = x; return s; }
 }
 
-/** Canonical text format of a P(doom) value ('0.15', '0.991'). */
-export const formatPDoom = (v: number) => v.toFixed(v >= 0.99 ? 3 : 2);
+/** Backwards-compatible P(doom) metric tracker. */
+export class PDoom extends MetricReadout {
+  constructor(lyrics?: Lyrics | null) {
+    const hits = (lyrics?.words ?? []).filter((w) => /p[-(\s]?doom/i.test(w.w)).map((w) => w.start + 0.06);
+    const vals = [0.15, 0.42, 0.81, 0.99];
+    const steps = [{ t: -1, v: 0.02 }, ...hits.map((t, i) => ({ t, v: vals[i] ?? 0.99 }))];
+    super(steps, 'P(DOOM)');
+  }
+}
+
+/** Canonical text format of a metric readout value ('0.15', '0.991'). */
+export const formatMetricValue = (v: number) => v.toFixed(v >= 0.99 ? 3 : 2);
+export const formatPDoom = formatMetricValue;
 
 /**
- * Draw the P(doom) instrument (label, digits, tick bar) anywhere, at any scale, into a
- * Canvas2D context — for plates that stage the readout inside their world.
+ * Draw a technical metric instrument (label, digits, tick bar) into a Canvas2D context.
  * (x, y) = left end of the digits' baseline; the label sits above, the bar below.
  */
 export function drawReadout(c: CanvasRenderingContext2D, x: number, y: number, v: number, o: { scale?: number; text?: string; digits?: string; label?: string; bar?: boolean } = {}) {
@@ -54,11 +68,11 @@ export function drawReadout(c: CanvasRenderingContext2D, x: number, y: number, v
   c.font = font(F.mono(500), 13 * k);
   c.letterSpacing = `${3 * k}px`;
   c.fillStyle = o.label ?? rgba('bone', 0.6);
-  c.fillText('P(DOOM)', x, y - 44 * k);
+  c.fillText((o.label ?? 'METRIC').toUpperCase(), x, y - 44 * k);
   c.letterSpacing = '0px';
   c.font = font(F.mono(400), 40 * k);
   c.fillStyle = o.digits ?? rgba('bone', 0.92);
-  c.fillText(o.text ?? formatPDoom(v), x - 2 * k, y);
+  c.fillText(o.text ?? formatMetricValue(v), x - 2 * k, y);
   if (o.bar !== false) {
     const bw = 220 * k, by = y + 16 * k;
     c.fillStyle = rgba('bone', 0.18);
@@ -75,18 +89,32 @@ export interface HudState {
   opacity: number;
   /** 0..1 the crop-mark frame: 1 in place, 0 flown out past the edges (see PostParams.frame). */
   frame: number;
-  /** Opacity of the corner P(doom) readout (off by default: P(doom) lives inside the plates). */
+  /** Opacity of the corner technical readout (off by default). */
   readout: number;
-  /** 0..1: the plate is light (bone paper) — draw captions/crop marks in ink. */
+  /** 0..1: the background is light (bone paper) — draw captions/crop marks in ink. */
   paper: number;
-  pdoomOverride?: string; // e.g. 'NaN'
+  metricOverride?: string;
+  pdoomOverride?: string; // Backwards-compatible alias
   corruption?: number; // 0..1 glitch the readout
 }
 
 export class Hud {
   layer = new Layer2D();
   private ink = false;
-  constructor(public pdoom?: PDoom | null, public captions: Caption[] = []) {}
+  constructor(public readoutTracker?: MetricReadout | null, public captions: Caption[] = []) {}
+
+  get metric(): MetricReadout | null | undefined {
+    return this.readoutTracker;
+  }
+  set metric(v: MetricReadout | null | undefined) {
+    this.readoutTracker = v;
+  }
+  get pdoom(): MetricReadout | null | undefined {
+    return this.readoutTracker;
+  }
+  set pdoom(v: MetricReadout | null | undefined) {
+    this.readoutTracker = v;
+  }
 
   draw(t: number, st: HudState) {
     const L = this.layer;
@@ -96,7 +124,7 @@ export class Hud {
     c.globalAlpha = st.opacity;
     this.ink = st.paper > 0.5;
     if (st.frame > 0.001) this.cropMarks(c, st.frame);
-    if (this.pdoom && st.readout > 0.001) { c.save(); c.globalAlpha *= st.readout; this.readout(c, t, st); c.restore(); }
+    if (this.readoutTracker && st.readout > 0.001) { c.save(); c.globalAlpha *= st.readout; this.readout(c, t, st); c.restore(); }
     this.caption(c, t);
     return L.upload();
   }
@@ -118,18 +146,18 @@ export class Hud {
   }
 
   private readout(c: CanvasRenderingContext2D, t: number, st: HudState) {
-    if (!this.pdoom) return;
-    const v = this.pdoom.value(t);
-    const fl = this.pdoom.flash(t);
+    if (!this.readoutTracker) return;
+    const v = this.readoutTracker.value(t);
+    const fl = this.readoutTracker.flash(t);
     const x = 64, y = H - 66;
     c.save();
     c.textBaseline = 'alphabetic';
     c.font = font(F.mono(500), 13);
     c.letterSpacing = '3px';
     c.fillStyle = rgba('bone', 0.6);
-    c.fillText('P(DOOM)', x, y - 44);
+    c.fillText(this.readoutTracker.label.toUpperCase(), x, y - 44);
     c.letterSpacing = '0px';
-    let s = st.pdoomOverride ?? v.toFixed(v >= 0.99 ? 3 : 2);
+    let s = st.metricOverride ?? st.pdoomOverride ?? formatMetricValue(v);
     if (st.corruption && st.corruption > 0) {
       const glyphs = '01#%?!Ø∞';
       s = Array.from(s).map((ch, i) => (hash(i, Math.floor(t * 20)) < st.corruption! * 0.7 ? glyphs[Math.floor(hash(i, t) * glyphs.length)] : ch)).join('');

@@ -152,19 +152,20 @@ assert(collisions.length >= 1, `SceneGraph detects geometric 2D bounding box col
 assert(collisions[0]!.overlapArea > 0, `Collision overlap area is positive (${collisions[0]!.overlapArea.toFixed(0)}px²)`);
 
 // Test telemetry sync
+const testBridge = {
+  probe: true,
+  textProbes: [] as any[],
+  recordText: true,
+  currentFrameIdx: 42,
+};
 (globalThis as any).window = {
-  __pdoom: {
-    probe: true,
-    textProbes: [],
-    recordText: true,
-    currentFrameIdx: 42,
-  },
+  __motion: testBridge,
+  __pdoom: testBridge,
 };
 
 sg.syncTelemetry(1.5);
-const pdoom = (globalThis as any).window.__pdoom;
-assert(pdoom.textProbes.length >= 1, 'SceneGraph synchronizes text entities to window.__pdoom.textProbes');
-assert(pdoom.textProbes[0].text === 'CALLOUT COPY', 'Telemetry probe text matches entity text');
+assert(testBridge.textProbes.length >= 1, 'SceneGraph synchronizes text entities to window.__motion.textProbes');
+assert(testBridge.textProbes[0]!.text === 'CALLOUT COPY', 'Telemetry probe text matches entity text');
 
 // ----------------------------------------------------------------------------
 // 3. Test Declarative Scene DSL (defineScene, SceneContext)

@@ -4,7 +4,7 @@
 //   sheet:   bun scripts/render.ts sheet --from 20 --to 35 [--n 12] [--cols 4] [--only ids] [--out file.png]   (or --times a,b,c | --cuts)
 //   plates:  bun scripts/render.ts plates   (renders one representative JPEG per plate into public/plates/ (used by the outro's rewind), times from plates.json or entry midpoints)
 //   perf:    bun scripts/render.ts perf --from 20 --to 25 [--only ids] [--samples 1] [--shutter 0.5]   (avg ms per frame incl. GPU sync and the export's pixel readback)
-//   video:   bun scripts/render.ts video [--from 0] [--to 156.65] [--fps 60] [--crf 16] [--x264 aq-mode=3] [--gpu] [--gpu-encoder h264_amf] [--samples 1] [--shutter 0.5] [--out ../out/pdoom.mp4] [--noaudio]
+//   video:   bun scripts/render.ts video [--from 0] [--to 156.65] [--fps 60] [--crf 16] [--x264 aq-mode=3] [--gpu] [--gpu-encoder h264_amf] [--samples 1] [--shutter 0.5] [--out ../out/motion.mp4] [--noaudio]
 //            --gpu enables AMD AMF hardware video encoding (h264_amf, hevc_amf, av1_amf), offloading CPU load;
 //            --samples N averages N sub-frames per frame over shutter×(1/fps): motion blur + temporal AA;
 //            --samples auto picks the count per frame (4, 12, 36, 108 or 324, see Engine.render)
@@ -20,6 +20,7 @@
 import { chromium, type Page } from 'playwright-core';
 import { mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
+import { ExportPipeline, type ExportFormat, type ExportVideoOptions } from '../src/engine/export';
 import { CONFIG, loadCalibrationData, type FrameMetrics, type AudioEvent } from './motion/config';
 import {
   parsePalette,
@@ -88,7 +89,7 @@ async function ensureServer(): Promise<{ url: string; stop: () => void }> {
   if (await reachable(url)) return { url, stop: () => {} };
   const port = 5300 + Math.floor(Math.random() * 500);
   // no live reload: a file saved mid-render must not reload the page
-  const proc = Bun.spawn([process.execPath, 'x', 'vite', '--port', String(port), '--strictPort'], { cwd: APP, stdout: 'ignore', stderr: 'ignore', env: { ...process.env, PDOOM_NO_HMR: '1' } });
+  const proc = Bun.spawn([process.execPath, 'x', 'vite', '--port', String(port), '--strictPort'], { cwd: APP, stdout: 'ignore', stderr: 'ignore', env: { ...process.env, MOTION_NO_HMR: '1', PDOOM_NO_HMR: '1' } });
   const u = `http://localhost:${port}`;
   for (let i = 0; i < 100 && !(await reachable(u)); i++) await Bun.sleep(100);
   if (!(await reachable(u))) {
@@ -146,12 +147,13 @@ async function openPage(url: string) {
     only = Array.from(expanded).join(',');
   }
   await page.goto(`${url}/?export=1${only ? `&only=${only}` : ''}${SCALE !== 1 ? `&scale=${SCALE}` : ''}`);
-  await page.waitForFunction(() => (window as any).__pdoom?.ready || (window as any).__pdoom?.error, null, { timeout: 120000 });
-  const err = await page.evaluate(() => (window as any).__pdoom.error);
+  await page.waitForFunction(() => (window as any).__motion?.ready || (window as any).__pdoom?.ready || (window as any).__motion?.error || (window as any).__pdoom?.error, null, { timeout: 120000 });
+  const bridgeVer = await page.evaluate(() => (window as any).__motion?.version || (window as any).__pdoom?.version);
+  const err = await page.evaluate(() => (window as any).__motion?.error || (window as any).__pdoom?.error);
   if (err) throw new Error(`app failed to boot:\n${err}\n${logs.join('\n')}`);
-  const size: [number, number] = await page.evaluate(() => [(window as any).__pdoom.width ?? 1920, (window as any).__pdoom.height ?? 1080]);
+  const size: [number, number] = await page.evaluate(() => [(window as any).__motion?.width ?? (window as any).__pdoom?.width ?? 1920, (window as any).__motion?.height ?? (window as any).__pdoom?.height ?? 1080]);
   if (size[0] !== OW || size[1] !== OH) throw new Error(`app renders ${size[0]}x${size[1]}, expected ${OW}x${OH} (--scale ${SCALE})`);
-  const sceneErrors: string[] = await page.evaluate(() => (window as any).__pdoom.errors);
+  const sceneErrors: string[] = await page.evaluate(() => (window as any).__motion?.errors || (window as any).__pdoom?.errors || []);
   if (sceneErrors.length) console.error('SCENE ERRORS:\n' + sceneErrors.join('\n'));
   return { browser, page, logs };
 }
@@ -160,11 +162,11 @@ async function stills(page: Page, times: number[], outDir: string) {
   mkdirSync(outDir, { recursive: true });
   const files: string[] = [];
   for (const t of times) {
-    const k: number = await page.evaluate(([t, s, sh]) => (window as any).__pdoom.still(t, s, sh), [t, SAMPLES, numOpt('shutter', 0.5, 0, 1)] as const);
+    const k: number = await page.evaluate(([t, s, sh]) => ((window as any).__motion || (window as any).__pdoom).still(t, s, sh), [t, SAMPLES, numOpt('shutter', 0.5, 0, 1)] as const);
     const f = path.join(outDir, `f_${t.toFixed(2).padStart(7, '0')}.png`);
     if (typeof SAMPLES !== 'number') console.log(`t=${t}: ${k} sub-frames`);
     // at scale > 1 the canvas is shown downscaled on the page: save the full-res pixel buffer instead
-    if (SCALE !== 1) await Bun.write(f, Buffer.from(await page.evaluate(() => (window as any).__pdoom.png()), 'base64'));
+    if (SCALE !== 1) await Bun.write(f, Buffer.from(await page.evaluate(() => ((window as any).__motion || (window as any).__pdoom).png()), 'base64'));
     else await page.screenshot({ path: f, clip: { x: 0, y: 0, width: 1920, height: 1080 } });
     files.push(f);
   }
@@ -174,7 +176,7 @@ async function stills(page: Page, times: number[], outDir: string) {
 async function sheet(page: Page, times: number[], cols: number, out: string) {
   const shutter = numOpt('shutter', 0.5, 0, 1);
   const dataUrl: string = await page.evaluate(async ({ times, cols, samples, shutter }: any) => {
-    const P = (window as any).__pdoom;
+    const P = (window as any).__motion || (window as any).__pdoom;
     const cw = 480, ch = 270, pad = 4, lab = 18;
     const rows = Math.ceil(times.length / cols);
     const cv = document.createElement('canvas');
@@ -200,19 +202,40 @@ async function video(page: Page, from: number, to: number, fps: number, out: str
   const outDir = path.dirname(path.resolve(out));
   if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
   const gpuEncode = flag('gpu-encode') || (mode === 'video' && flag('gpu'));
-  const crf = opt('crf', gpuEncode ? '22' : '16')!;
-  const audio = path.join(ROOT, 'audio/whos-holding-on-to-who.mp3');
+  const format: ExportFormat = (opt('format') as ExportFormat) || (flag('transparent') ? 'webm-alpha' : out.endsWith('.webm') ? 'webm-alpha' : out.endsWith('.mov') ? 'prores-4444' : 'mp4');
+  const crfVal = opt('crf') ? Number(opt('crf')) : (gpuEncode ? 22 : undefined);
+  const explicitAudio = opt('audio');
+  const defaultAudio = path.join(APP, 'public/audio/audio.mp3');
+  const audio = explicitAudio ? resolveOut(explicitAudio) : (existsSync(defaultAudio) ? defaultAudio : '');
   const hasAudio = !flag('noaudio') && existsSync(audio);
-  const args = ['ffmpeg', '-y', '-loglevel', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${OW}x${OH}`, '-r', String(fps), '-i', 'pipe:0'];
-  if (hasAudio) args.push('-ss', String(from), '-t', String(to - from), '-i', audio);
-  if (gpuEncode) {
-    const enc = opt('gpu-encoder', 'h264_amf')!;
-    args.push('-vf', 'vflip', '-c:v', enc, '-quality', 'quality', '-rc', 'cqp', '-qp_i', crf, '-qp_p', crf, '-pix_fmt', 'yuv420p');
-  } else {
-    args.push('-vf', 'vflip', '-c:v', 'libx264', '-preset', opt('preset', 'slow')!, '-crf', crf, '-pix_fmt', 'yuv420p', '-tune', 'grain', '-x264-params', opt('x264', 'aq-mode=3')!);
-  }
-  if (hasAudio) args.push('-c:a', 'aac', '-b:a', '320k', '-shortest');
-  args.push('-movflags', '+faststart', out);
+  const exportOpts: ExportVideoOptions = {
+    format,
+    outPath: out,
+    width: OW,
+    height: OH,
+    fps: fps as any,
+    from,
+    to,
+    audioTrack: hasAudio ? audio : undefined,
+    transparent: flag('transparent') || format === 'webm-alpha' || format === 'prores-4444',
+    gpu: gpuEncode,
+    gpuEncoder: (opt('gpu-encoder', 'h264_amf') as any),
+    crf: crfVal,
+    preset: opt('preset', 'slow'),
+    x264Params: opt('x264', 'aq-mode=3'),
+  };
+  const validation = ExportPipeline.validate(exportOpts);
+  if (!validation.valid) console.warn(`[export warning]: ${validation.errors.join('; ')}`);
+  const args = ExportPipeline.buildFFmpegArgs(exportOpts);
+
+
+
+
+
+
+
+
+
   const ff = Bun.spawn(args, { stdin: 'pipe', stdout: 'inherit', stderr: 'inherit' });
   let frames = 0;
   const total = Math.round(to * fps) - Math.round(from * fps);
@@ -234,7 +257,7 @@ async function video(page: Page, from: number, to: number, fps: number, out: str
       },
     },
   });
-  const used: Record<string, number> = await page.evaluate((o) => (window as any).__pdoom.stream(o), { from, to, fps, ws: `ws://localhost:${server.port}`, samples: SAMPLES, shutter: numOpt('shutter', 0.5, 0, 1), inflight: 4 });
+  const used: Record<string, number> = await page.evaluate((o) => ((window as any).__motion || (window as any).__pdoom).stream(o), { from, to, fps, ws: `ws://localhost:${server.port}`, samples: SAMPLES, shutter: numOpt('shutter', 0.5, 0, 1), inflight: 4 });
   // wait for all frames to arrive (bounded: 60s + 2s/frame, cleanup on timeout)
   const deadline = performance.now() + 60000 + total * 2000;
   try {
@@ -289,18 +312,20 @@ async function motion(page: Page) {
     : [-0.2, -0.1, 0, 0.05, 0.1, 0.2, 0.4];
 
   const comparePath = opt('compare');
-  const outDir = resolveOut(opt('out'), path.join(ROOT, 'out/motion/doors-v3'));
+  const outDir = resolveOut(opt('out'), path.join(ROOT, 'out/motion'));
   mkdirSync(outDir, { recursive: true });
   mkdirSync(path.join(outDir, 'events'), { recursive: true });
 
-  const tl: { id: string; start: number; end: number }[] = await page.evaluate(() => (window as any).__pdoom.timeline);
-  if (!tl || tl.length === 0) throw new Error('Could not read timeline from window.__pdoom');
+  const tl: { id: string; start: number; end: number }[] = await page.evaluate(() => (window as any).__motion?.timeline || (window as any).__pdoom?.timeline || []);
+  if (!tl || tl.length === 0) throw new Error('Could not read timeline from window.__motion / window.__pdoom');
   const activeFirst = tl.filter((e) => from >= e.start && from < e.end);
-  const plateLabel = activeFirst.map((e) => e.id).join('+') || 'doors';
+  const plateLabel = activeFirst.map((e) => e.id).join('+') || (tl[0]?.id ?? 'scene');
   console.log(`[motion] Analyzing window [${from.toFixed(2)}–${to.toFixed(2)}s] (${(to - from).toFixed(2)}s) at ${fps} fps on plate(s): ${plateLabel}`);
 
-  const lyricsData = existsSync(path.join(APP, 'public/data/lyrics.json'))
-    ? await Bun.file(path.join(APP, 'public/data/lyrics.json')).json()
+  const lyricsFile = opt('lyrics') || opt('lyrics-file');
+  const lyricsPath = lyricsFile ? resolveOut(lyricsFile) : path.join(APP, 'public/data/lyrics.json');
+  const lyricsData = (!flag('no-lyrics') && existsSync(lyricsPath))
+    ? await Bun.file(lyricsPath).json()
     : null;
   const audioData = existsSync(path.join(APP, 'public/data/audio.json'))
     ? await Bun.file(path.join(APP, 'public/data/audio.json')).json()
@@ -388,7 +413,7 @@ async function motion(page: Page) {
     },
   });
 
-  const streamRes = await page.evaluate((o) => (window as any).__pdoom.stream(o), {
+  const streamRes = await page.evaluate((o) => ((window as any).__motion || (window as any).__pdoom).stream(o), {
     from,
     to,
     fps,
@@ -473,6 +498,7 @@ async function motion(page: Page) {
 
   console.log('[motion] Analyzing text probe & lyric join...');
   const textAnalysis = analyzeTextProbes(textProbes, lyricsData, from, to, fps);
+  if (textAnalysis.words.length === 0) console.log('[motion] Procedural scene mode: 0 active lyrics (lyric rules F01-F03, F10 inactive).');
 
   for (const f of frameMetrics) {
     const fTexts = textProbes.filter((r) => r.frameIdx === f.n);
@@ -779,29 +805,29 @@ try {
     }
     if (flag('cuts')) {
       // 4 frames around every timeline boundary: 2 frames before, 2 after
-      const tl: { id: string; start: number }[] = await page.evaluate(() => (window as any).__pdoom.timeline);
+      const tl: { id: string; start: number }[] = await page.evaluate(() => (window as any).__motion?.timeline || (window as any).__pdoom?.timeline || []);
       times = tl.slice(1).flatMap((e) => [e.start - 0.1, e.start - 1 / 60, e.start + 1 / 60, e.start + 0.1]);
     }
     const out = resolveOut(opt('out'), path.join(ROOT, `out/sheets/sheet_${from}-${to}.png`));
     await sheet(page, times, Math.round(numOpt('cols', 4, 1, 16)), out);
     console.log(out);
   } else if (mode === 'plates') {
-    const tl: { id: string; start: number; end: number }[] = await page.evaluate(() => (window as any).__pdoom.timeline);
-    const legacyFigs = ['open', 'loss', 'room', 'shoggoth', 'spacetime', 'ascent', 'bureau', 'leftturn', 'paperclips', 'fuse', 'stack', 'dense', 'loom', 'ilya'];
-    const figs = tl.some((x) => legacyFigs.includes(x.id)) ? legacyFigs : tl.map((x) => x.id);
+    const tl: { id: string; start: number; end: number }[] = await page.evaluate(() => (window as any).__motion?.timeline || (window as any).__pdoom?.timeline || []);
+    const sceneFilter = opt('scenes') ? new Set(opt('scenes')!.split(',')) : null;
+    const figs = sceneFilter ? tl.filter((x) => sceneFilter.has(x.id)).map((x) => x.id) : tl.map((x) => x.id);
     const overrides: Record<string, number> = existsSync(path.join(APP, 'plates.json')) ? await Bun.file(path.join(APP, 'plates.json')).json() : {};
-    const dir = path.join(APP, 'public/plates');
+    const dir = resolveOut(opt('out'), path.join(APP, 'public/plates'));
     mkdirSync(dir, { recursive: true });
-    await page.evaluate(() => { (window as any).__pdoom.engine.hudOff = true; });
+    await page.evaluate(() => { const b = (window as any).__motion || (window as any).__pdoom; if (b?.engine) b.engine.hudOff = true; });
     for (let i = 0; i < figs.length; i++) {
       const e = tl.find((x) => x.id === figs[i]);
       if (!e) continue;
       const t = overrides[figs[i]!] ?? (e.start + e.end) / 2;
-      await page.evaluate((t) => (window as any).__pdoom.still(t, 4, 0.2), t);
+      await page.evaluate((t) => { const b = (window as any).__motion || (window as any).__pdoom; return b?.still(t, 4, 0.2); }, t);
       const f = path.join(dir, `fig${String(i + 1).padStart(2, '0')}.${SCALE !== 1 ? 'png' : 'jpg'}`);
       if (SCALE !== 1) {
         // Full-res pixel buffer at SCALE (matches stills path); downscale via canvas for jpeg.
-        const b64: string = await page.evaluate(() => (window as any).__pdoom.png());
+        const b64: string = await page.evaluate(() => { const b = (window as any).__motion || (window as any).__pdoom; return b?.png(); });
         await Bun.write(f, Buffer.from(b64, 'base64'));
       } else {
         await page.screenshot({ path: f, type: 'jpeg', quality: 90, clip: { x: 0, y: 0, width: OW, height: OH } });
@@ -813,7 +839,7 @@ try {
     let to = numOpt('to', 5, 0);
     if (to <= from) { console.warn(`[perf] Empty window (to<=from), expanding to from+1s`); to = from + 1; }
     const r = await page.evaluate(async ({ from, to, samples, shutter }) => {
-      const P = (window as any).__pdoom;
+      const P = (window as any).__motion || (window as any).__pdoom;
       const ms: number[] = [];
       const buf = new Uint8Array(P.width * P.height * 4);
       P.still(from);
@@ -830,11 +856,11 @@ try {
     }, { from, to, samples: SAMPLES, shutter: numOpt('shutter', 0.5, 0, 1) });
     console.log(`frames ${r.n}  avg ${r.avg.toFixed(1)}ms  p50 ${r.p50.toFixed(1)}  p95 ${r.p95.toFixed(1)}  max ${r.max.toFixed(1)}  sub-frames ${hist(r.used)}`);
   } else if (mode === 'video') {
-    const dur: number = await page.evaluate(() => (window as any).__pdoom.duration);
+    const dur: number = await page.evaluate(() => (window as any).__motion?.duration ?? (window as any).__pdoom?.duration ?? 5.0);
     const vFrom = numOpt('from', 0, 0);
     let vTo = numOpt('to', dur, 0);
     if (vTo <= vFrom) { console.warn(`[video] Empty window (to<=from), expanding to from+1s`); vTo = vFrom + 1; }
-    await video(page, vFrom, vTo, numOpt('fps', 60, 15, 120), resolveOut(opt('out'), path.join(ROOT, 'out/whos-holding-on-to-who.mp4')));
+    await video(page, vFrom, vTo, numOpt('fps', 60, 15, 120), resolveOut(opt('out'), path.join(ROOT, 'out/motion.mp4')));
   } else if (mode === 'motion') {
     await motion(page);
   } else if (mode === 'onion') {

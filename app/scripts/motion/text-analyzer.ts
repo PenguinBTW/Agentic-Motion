@@ -61,6 +61,7 @@ export function analyzeTextProbes(
   // A run connects consecutive frames with same normalized string and centre moving < 200px
   const runs: TextRun[] = [];
   const activeRuns: TextRun[] = [];
+  const activeByNorm = new Map<string, TextRun[]>();
   let nextRunId = 1;
 
   // Group records by frameIdx
@@ -74,26 +75,30 @@ export function analyzeTextProbes(
   const frameIndices = Array.from(recordsByFrame.keys()).sort((a, b) => a - b);
   for (const fIdx of frameIndices) {
     const frameRecs = recordsByFrame.get(fIdx)!;
-    const remainingActive = [...activeRuns];
+    const claimedInFrame = new Set<TextRun>();
 
     for (const rec of frameRecs) {
       const norm = normalizeText(rec.text);
-      let matchedRunIdx = -1;
+      let bestRun: TextRun | null = null;
       let minDist = 200.0;
 
       // Punct-only records normalize to "" — never merge those (distinct runs).
       if (norm !== "") {
-        for (let i = 0; i < remainingActive.length; i++) {
-          const ar = remainingActive[i]!;
+        const candidates = activeByNorm.get(norm);
+        if (candidates) {
+          for (const ar of candidates) {
+            if (claimedInFrame.has(ar)) continue;
+
           const lastRec = ar.records[ar.records.length - 1]!;
           // Allow a small gap (gap <= 2) to prevent transient frame drops from splitting runs
           if (ar.normalizedText === norm && ar.normalizedText !== "" && fIdx >= lastRec.frameIdx + 1 && fIdx <= lastRec.frameIdx + 2) {
             const d = Math.hypot(rec.cx - lastRec.cx, rec.cy - lastRec.cy);
             if (d < minDist) {
               minDist = d;
-              matchedRunIdx = i;
+              bestRun = ar;
             }
           }
+        }
         }
       }
 
@@ -103,8 +108,8 @@ export function analyzeTextProbes(
       const inH = Math.max(0, Math.min(rec.bbox[3], 1080) - Math.max(rec.bbox[1], 0));
       const clipPct = (1 - (inW * inH) / area) * 100;
 
-      if (matchedRunIdx >= 0) {
-        const ar = remainingActive[matchedRunIdx]!;
+      if (bestRun) {
+        const ar = bestRun;
         ar.records.push(rec);
         ar.last_t = rec.t;
         ar.dur = ar.last_t - ar.first_t;
@@ -112,7 +117,7 @@ export function analyzeTextProbes(
         ar.min_alpha = Math.min(ar.min_alpha, rec.globalAlpha);
         ar.max_alpha = Math.max(ar.max_alpha, rec.globalAlpha);
         ar.max_clip_pct = Math.max(ar.max_clip_pct, clipPct);
-        remainingActive.splice(matchedRunIdx, 1);
+        claimedInFrame.add(bestRun);
       } else {
         const newRun: TextRun = {
           id: nextRunId++,
@@ -132,16 +137,30 @@ export function analyzeTextProbes(
         };
         runs.push(newRun);
         activeRuns.push(newRun);
+        if (norm !== "") {
+          let list = activeByNorm.get(norm);
+          if (!list) { list = []; activeByNorm.set(norm, list); }
+          list.push(newRun);
+        }
+        claimedInFrame.add(newRun);
       }
     }
 
     // Retire inactive runs — only if gap exceeds tolerance (fIdx > last+2),
     // so a 1-2 frame probe dropout does not split the run.
-    for (const ar of remainingActive) {
+    for (let i = activeRuns.length - 1; i >= 0; i--) {
+      const ar = activeRuns[i]!;
       const lastRec = ar.records[ar.records.length - 1]!;
       if (fIdx <= lastRec.frameIdx + 2) continue;
-      const idx = activeRuns.indexOf(ar);
-      if (idx >= 0) activeRuns.splice(idx, 1);
+        activeRuns.splice(i, 1);
+        if (ar.normalizedText !== "") {
+          const list = activeByNorm.get(ar.normalizedText);
+          if (list) {
+            const lIdx = list.indexOf(ar);
+            if (lIdx >= 0) list.splice(lIdx, 1);
+            if (list.length === 0) activeByNorm.delete(ar.normalizedText);
+          }
+        }
     }
   }
 

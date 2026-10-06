@@ -360,7 +360,7 @@ export async function renderEventStrip(
 
   return await page.evaluate(
     async ({ tileCaptions }) => {
-      const P = (window as any).__pdoom;
+      const P = (window as any).__motion || (window as any).__pdoom;
       const tw = 480, th = 270, capH = 24, pad = 6;
       const cols = tileCaptions.length;
       const cv = document.createElement('canvas');

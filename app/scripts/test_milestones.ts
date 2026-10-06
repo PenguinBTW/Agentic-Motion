@@ -8,6 +8,7 @@ const testScripts = [
   'test_milestone4.ts',
   'test_visual_and_telemetry.ts',
   'test_bugfixes.ts',
+  'test_multiscene.ts',
 ];
 
 console.log('================================================================');

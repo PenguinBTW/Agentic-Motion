@@ -1,7 +1,7 @@
 // Declarative Scene Authoring DSL & Strict Lifecycle (defineScene, SceneContext)
 // Protects autonomous coding agents from boilerplate errors by automating:
 // 1. Primitive instantiation and registration in SceneGraph
-// 2. Zero-annotation telemetry synchronization to window.__pdoom.textProbes
+// 2. Zero-annotation telemetry synchronization to window.__motion.textProbes (and __pdoom alias)
 // 3. Batched GPU drawing with automatic renderer.resetState() cleanup
 // 4. Strict font readiness gating (document.fonts.ready)
 import * as THREE from 'three';

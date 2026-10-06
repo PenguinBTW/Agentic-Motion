@@ -57,7 +57,7 @@ const proc = Bun.spawn([process.execPath, 'x', 'vite', '--port', String(PORT), '
   cwd: REF_APP,
   stdout: 'ignore',
   stderr: 'ignore',
-  env: { ...process.env, PDOOM_NO_HMR: '1' },
+  env: { ...process.env, MOTION_NO_HMR: '1', PDOOM_NO_HMR: '1' },
 });
 
 async function reachable(url: string) {
@@ -146,7 +146,8 @@ try {
     const proto = CanvasRenderingContext2D.prototype;
     const origFillText = proto.fillText;
     const origStrokeText = proto.strokeText;
-    (window as any).__pdoom_textProbes = [];
+    (window as any).__motion_textProbes = [];
+    (window as any).__pdoom_textProbes = (window as any).__motion_textProbes;
 
     function recordCall(ctx: any, text: any, x: number, y: number, isStroke: boolean) {
       const str = String(text ?? '');
@@ -163,7 +164,7 @@ try {
       const y0 = y - ascent, y1 = y + descent;
       const m = ctx.getTransform();
       // Scale-aware to match live hook (main.ts): divide by P.scale unless _isScaled.
-      const P = (window as any).__pdoom;
+      const P = (window as any).__motion || (window as any).__pdoom;
       const div = ctx._isScaled ? 1 : (P?.scale || 1);
       const a = m.a / div, b = m.b / div, cc = m.c / div, d = m.d / div, e = m.e / div, f = m.f / div;
       const pts = [
@@ -179,7 +180,7 @@ try {
       const capHeight = ascent * Math.hypot(cc, d);
       const hPct = (capHeight / 1080) * 100;
       const layerId = ctx._layerId || ctx.canvas?._layerId || ctx.canvas?.id || 'layer2d';
-      (window as any).__pdoom_textProbes.push({
+      ((window as any).__motion_textProbes || (window as any).__pdoom_textProbes).push({
         frameIdx: P?.currentFrameIdx ?? 0,
         t: P?.currentTime ?? 0,
         text: str,
@@ -209,10 +210,10 @@ try {
   });
 
   await page.goto(`${url}/?export=1`);
-  await page.waitForFunction(() => (window as any).__pdoom?.ready === true, { timeout: 30000 });
+  await page.waitForFunction(() => (window as any).__motion?.ready === true || (window as any).__pdoom?.ready === true, { timeout: 30000 });
 
   const timeline: { id: string; start: number; end: number }[] = await page.evaluate(
-    () => (window as any).__pdoom.timeline
+    () => (window as any).__motion?.timeline || (window as any).__pdoom?.timeline || []
   );
 
   console.log(`[calibrate] Discovered ${timeline.length} plates in Example project:`);
@@ -251,8 +252,9 @@ try {
     const tStart = performance.now();
     await page.evaluate(
       (o) => {
-        (window as any).__pdoom_textProbes = [];
-        return (window as any).__pdoom.stream(o);
+        (window as any).__motion_textProbes = [];
+        (window as any).__pdoom_textProbes = (window as any).__motion_textProbes;
+        return ((window as any).__motion || (window as any).__pdoom).stream(o);
       },
       {
         from,
@@ -269,7 +271,7 @@ try {
     wsServer.stop();
 
     const plateWallClock = (performance.now() - tStart) / 1000;
-    const textProbes: any[] = await page.evaluate(() => (window as any).__pdoom_textProbes || []);
+    const textProbes: any[] = await page.evaluate(() => (window as any).__motion_textProbes || (window as any).__pdoom_textProbes || []);
 
     // Compute pixel metrics
     const lumas: Float32Array[] = [];

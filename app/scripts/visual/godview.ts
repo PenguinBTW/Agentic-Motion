@@ -36,7 +36,7 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
 
   if (opts.from === undefined || opts.to === undefined) {
     const tl: { id: string; start: number; end: number }[] = await page.evaluate(
-      () => (window as any).__pdoom?.timeline || []
+      () => (window as any).__motion?.timeline || (window as any).__pdoom?.timeline || []
     );
     if (opts.scene && tl.length > 0) {
       const match = tl.find((e) => e.id === opts.scene);
@@ -53,9 +53,12 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
   if (from === undefined && to !== undefined) from = Math.max(0, to - 10.0);
   else if (to === undefined && from !== undefined) to = from + 10.0;
   else if (from === undefined && to === undefined) {
-    console.warn('[godview] Unknown scene/range — defaulting to 8.00–18.50s. Pass --scene with timeline match or --from/--to.');
-    from = 8.00;
-    to = 18.50;
+    const tl: { id: string; start: number; end: number }[] = await page.evaluate(() => (window as any).__motion?.timeline || (window as any).__pdoom?.timeline || []);
+    from = tl[0]?.start ?? 0.0;
+    to = tl[tl.length - 1]?.end ?? (from + 5.0);
+    console.warn(`[godview] No range provided — defaulting to timeline bounds [${from.toFixed(2)}–${to.toFixed(2)}s].`);
+
+
     usedFallbackRange = true;
   }
   const numSamples = opts.samples ?? 24;
@@ -69,14 +72,14 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
 
   console.log(`[godview] Rendering 3D God-View camera blueprint for [${from.toFixed(2)}–${to.toFixed(2)}s] (${numSamples} samples)...`);
 
-  const showCorridor = Boolean(opts.corridor || (opts.scene && (opts.scene.includes('doors') || opts.scene.includes('corridor'))));
+  const showCorridor = Boolean(opts.corridor || (opts.scene && opts.scene.includes('corridor')));
 
   const result: { dataUrl: string; summary: any } = await page.evaluate<
     { dataUrl: string; summary: any },
     { t0: number; t1: number; N: number; showCorridor: boolean; sceneName: string }
   >(
     async ({ t0, t1, N, showCorridor, sceneName }) => {
-      const P = (window as any).__pdoom;
+      const P = (window as any).__motion || (window as any).__pdoom;
       const W = 1920;
       const H = 1080;
 
@@ -111,7 +114,7 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
           } catch {}
         } else {
           // Fallback analytical corridor curve (generic template, NOT measured —
-          // only used when live __pdoom camera unavailable; labeled as such in output).
+          // only used when live __motion camera unavailable; labeled as such in output).
           const u = (t - t0) / Math.max(0.1, t1 - t0);
           z = -2.2 + u * u * 48.0;
           x = Math.sin(u * Math.PI * 2) * 0.4;
@@ -393,8 +396,9 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
   const _synth = (result as any).syntheticFallback;
   if (_synth || usedFallbackRange) {
     result.summary.fallback = true;
+    result.summary.isSyntheticFallback = true;
     result.summary.status = 'synthetic-fallback';
-    if (usedFallbackRange) console.warn('[godview] Used default range 8.00–18.50s (synthetic-fallback).');
+    if (usedFallbackRange) console.warn('[godview] Used timeline bounds fallback range (synthetic-fallback).');
     if (_synth) console.warn('[godview] Camera unavailable — used analytic template (synthetic-fallback, NOT measured).');
   }
 

@@ -80,6 +80,9 @@ export interface ExportVideoOptions {
   shutter?: number;
   gpu?: boolean;
   gpuEncoder?: 'h264_amf' | 'hevc_amf' | 'h264_nvenc' | 'hevc_nvenc';
+  crf?: number;
+  preset?: string;
+  x264Params?: string;
 }
 
 export class ExportPipeline {
@@ -159,22 +162,30 @@ export class ExportPipeline {
     args.push('-vf', 'vflip');
 
     // Codec & encoding options
+    const effectiveCrf = opts.crf ?? preset.defaultCrf;
     if (opts.gpu && opts.gpuEncoder) {
       args.push(
         '-c:v', opts.gpuEncoder,
         '-quality', 'quality',
         '-rc', 'cqp',
-        '-qp_i', String(preset.defaultCrf ?? 20),
-        '-qp_p', String(preset.defaultCrf ?? 20),
+        '-qp_i', String(effectiveCrf ?? 20),
+        '-qp_p', String(effectiveCrf ?? 20),
         '-pix_fmt', preset.pixFmt,
       );
     } else {
       args.push('-c:v', preset.codec);
-      if (preset.defaultCrf !== undefined) {
-        args.push('-crf', String(preset.defaultCrf));
+      if (effectiveCrf !== undefined) {
+        args.push('-crf', String(effectiveCrf));
       }
       args.push('-pix_fmt', preset.pixFmt);
-      args.push(...preset.extraArgs);
+      if (preset.codec === 'libx264') {
+        args.push('-preset', opts.preset ?? 'slow');
+        args.push('-tune', 'grain');
+        args.push('-x264-params', opts.x264Params ?? 'aq-mode=3');
+        args.push('-movflags', '+faststart');
+      } else {
+        args.push(...preset.extraArgs);
+      }
     }
 
     // Audio encoding options

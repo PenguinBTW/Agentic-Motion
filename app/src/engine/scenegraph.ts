@@ -169,11 +169,11 @@ export class SceneGraph {
   }
 
   /**
-   * Synchronize registered typography / HUD entities into window.__pdoom.textProbes
+   * Synchronize registered typography / HUD entities into window.__motion.textProbes
    */
   syncTelemetry(t: number): void {
     if (typeof window === 'undefined') return;
-    const P = (window as any).__pdoom;
+    const P = (window as any).__motion || (window as any).__pdoom;
     if (!P || !P.probe || !P.textProbes || !P.recordText) return;
 
     for (const e of this.entities.values()) {

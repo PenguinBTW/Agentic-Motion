@@ -1,12 +1,13 @@
 // Entry: preview player (default) or export mode (?export=1, driven by scripts/render.ts).
 import { Engine, type AdaptiveSampling } from './engine/engine';
 import { PW, PH, SCALE } from './engine/gl';
+import { BRIDGE_VERSION, type EngineBridge, type TextProbeRecord } from './engine/bridge';
 import { makeTimeline } from './timeline';
 
 const params = new URLSearchParams(location.search);
 const EXPORT = params.has('export');
 const ONLY = params.get('only'); // comma-separated scene ids to load (faster stills)
-const FROM = params.get('t') ? parseFloat(params.get('t')!) : null;
+const FROM = params.get('t') ? parseFloat(params.get('t')!) : (params.get('from') ? parseFloat(params.get('from')!) : null);
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 // physical size: 1920x1080 times ?scale= (the page CSS keeps showing it at 1920x1080)
@@ -14,10 +15,6 @@ canvas.width = PW;
 canvas.height = PH;
 
 const engine = new Engine(canvas, makeTimeline);
-
-declare global {
-  interface Window { __pdoom: any }
-}
 
 let TIMELINE: typeof engine.timeline = [];
 
@@ -36,7 +33,7 @@ function installTextProbeHook() {
   const origStrokeText = proto.strokeText;
 
   function recordCall(ctx: CanvasRenderingContext2D, text: any, x: number, y: number, isStroke: boolean) {
-    const P = window.__pdoom;
+    const P = window.__motion ?? window.__pdoom;
     if (!P?.probe || P.recordText === false) return;
     const str = String(text ?? '');
     if (!str || !str.trim()) return;
@@ -114,7 +111,8 @@ if (typeof window !== 'undefined') (window as any).__textHookActive = true;
 // ------------------------------------------------------------------ export API
 function setupExport() {
   document.body.classList.add('export');
-  window.__pdoom = {
+  const bridge: EngineBridge = {
+    version: BRIDGE_VERSION,
     engine,
     duration: engine.duration,
     errors: engine.errors,
@@ -124,7 +122,7 @@ function setupExport() {
     height: PH,
     probe: false,
     recordText: true,
-    textProbes: [] as any[],
+    textProbes: [],
     currentFrameIdx: 0,
     currentTime: 0,
     timeline: TIMELINE.map(({ id, start, end }) => ({ id, start, end })),
@@ -144,13 +142,9 @@ function setupExport() {
     },
     /**
      * Render [from, to) at fps and stream raw RGBA frames (bottom-up) over a WebSocket.
-     * Returns when all frames were sent, with a histogram of sub-frames per frame. With `inflight`, the
-     * receiver acknowledges each frame it has handed on (a text message with its running count) and at
-     * most `inflight` frames are unacknowledged:
-     * backpressure from the encoder, so a slow encode (4K) cannot pile frames up in the receiver's memory.
      */
-    async stream(opts: { from: number; to: number; fps: number; ws: string; samples?: number | AdaptiveSampling; shutter?: number; inflight?: number; probe?: boolean }) {
-      window.__pdoom.probe = false;
+    async stream(opts: any) {
+      bridge.probe = false;
       const ws = new WebSocket(opts.ws);
       ws.binaryType = 'arraybuffer';
       let acked = 0;
@@ -161,19 +155,18 @@ function setupExport() {
       const buf = new Uint8Array(PW * PH * 4);
       // warm-up: render one frame before the range so the first frame is sequential for stateful scenes
       const S = opts.samples ?? 1, SH = opts.shutter ?? 0.5;
-      // (adaptive sampling only runs stateless scenes: one sample is enough for the warm-up)
       if (n0 > 0) engine.render((n0 - 1) * dt, dt, false, typeof S === 'number' ? S : 1, SH);
       if (opts.probe) {
-        window.__pdoom.probe = true;
-        window.__pdoom.textProbes = [];
+        bridge.probe = true;
+        bridge.textProbes = [];
       }
       const used: Record<number, number> = {}; // sub-frames per frame -> frames
       const frameMeta: any[] = [];
       for (let n = n0; n < n1; n++) {
         const frameIdx = n - n0;
         const curT = n * dt;
-        window.__pdoom.currentFrameIdx = frameIdx;
-        window.__pdoom.currentTime = curT;
+        bridge.currentFrameIdx = frameIdx;
+        bridge.currentTime = curT;
         const a = performance.now();
         const k = engine.render(curT, dt, false, S, SH);
         used[k] = (used[k] ?? 0) + 1;
@@ -197,18 +190,21 @@ function setupExport() {
       while (ws.bufferedAmount > 0) await new Promise((r) => setTimeout(r, 5));
       ws.close();
       if (opts.probe) {
-        return { used, frameMeta, textProbes: window.__pdoom.textProbes };
+        return { used, frameMeta, textProbes: bridge.textProbes };
       }
       return used;
     },
+    ready: true,
   };
-  window.__pdoom.ready = true;
+  window.__motion = bridge;
+  window.__pdoom = bridge;
 }
 
 // ------------------------------------------------------------------ preview player
 function setupPlayer() {
-  const audio = new Audio('audio/pdoom.mp3');
-  audio.preload = 'auto';
+  const audioSrc = params.get('audio') || (engine.audio && !engine.audio.isDummy && engine.audio.duration > 0 ? 'audio/track.mp3' : null);
+  const audio = audioSrc ? new Audio(audioSrc) : null;
+  if (audio) audio.preload = 'auto';
   const ui = document.getElementById('ui')!;
   const scrub = document.getElementById('scrub') as HTMLInputElement;
   const info = document.getElementById('info')!;
@@ -234,13 +230,15 @@ function setupPlayer() {
   let loop: [number, number] | null = null;
   let lastAudioT = 0, lastPerf = performance.now();
   let audioAvailable = false;
-  audio.addEventListener('canplaythrough', () => { audioAvailable = true; });
-  audio.addEventListener('error', () => { audioAvailable = false; });
+  if (audio) {
+    audio.addEventListener('canplaythrough', () => { audioAvailable = true; });
+    audio.addEventListener('error', () => { audioAvailable = false; });
+  }
 
   const seek = (x: number) => {
     t = Math.max(0, Math.min(engine.duration - 0.001, x));
     lastPerf = performance.now();
-    if (audioAvailable && !audio.error) audio.currentTime = t;
+    if (audio && audioAvailable && !audio.error) audio.currentTime = t;
   };
   seek(t);
 
@@ -248,12 +246,12 @@ function setupPlayer() {
     playing = !playing;
     lastPerf = performance.now();
     if (playing) {
-      if (audioAvailable && !audio.error) {
+      if (audio && audioAvailable && !audio.error) {
         audio.currentTime = t;
         audio.play().catch(() => { audioAvailable = false; });
       }
     } else {
-      if (audioAvailable && !audio.error) audio.pause();
+      if (audio && audioAvailable && !audio.error) audio.pause();
     }
   };
   canvas.onclick = toggle;
@@ -277,7 +275,7 @@ function setupPlayer() {
   const tick = () => {
     if (playing) {
       const now = performance.now();
-      if (audioAvailable && !audio.error && !audio.paused) {
+      if (audio && audioAvailable && !audio.error && !audio.paused) {
         if (audio.currentTime !== lastAudioT) { lastAudioT = audio.currentTime; lastPerf = now; }
         t = lastAudioT + (now - lastPerf) / 1000;
         if (audio.ended) playing = false;
@@ -318,5 +316,7 @@ function setupPlayer() {
 boot().catch((e) => {
   console.error(e);
   document.body.insertAdjacentHTML('beforeend', `<pre style="color:#f55;position:fixed;top:0;left:0">${String(e?.stack ?? e)}</pre>`);
-  window.__pdoom = { error: String(e?.stack ?? e) };
+  const errBridge = { error: String(e?.stack ?? e), version: BRIDGE_VERSION } as any;
+  window.__motion = errBridge;
+  window.__pdoom = errBridge;
 });
