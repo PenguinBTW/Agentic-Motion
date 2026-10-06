@@ -41,9 +41,9 @@ export class AudioData {
   constructor(j: AudioJSON) {
     this.duration = j.duration;
     this.bpm = j.bpm;
-    this.beats = j.beats;
-    this.downbeats = j.downbeats;
-    this.sections = j.sections;
+    this.beats = j.beats ?? [];
+    this.downbeats = j.downbeats ?? [];
+    this.sections = j.sections ?? [];
     this.fps = j.fps || 100;
     // envelopes may be nested under `features` or top-level arrays
     for (const k of FEATURES) this.feat[k] = Float32Array.from(j.features?.[k] ?? ((j as any)[k] as number[] | undefined) ?? []);
@@ -151,6 +151,7 @@ export class AudioData {
   timeOfBeat(i: number): number {
     const b = this.beats;
     const n = b.length;
+    if (n === 0) return i * (60 / this.bpm);
     const period = n > 1 ? (b[n - 1]! - b[0]!) / (n - 1) : 60 / this.bpm;
     if (i <= 0) return (b[0] ?? 0) + i * period;
     if (i >= n - 1) return b[n - 1]! + (i - (n - 1)) * period;

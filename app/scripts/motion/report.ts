@@ -368,7 +368,7 @@ export function generateReportMarkdown(
   const p50Ms = msList[Math.floor(msList.length * 0.50)] ?? 0;
   const p95Ms = msList[Math.floor(msList.length * 0.95)] ?? 0;
   const maxMs = msList[msList.length - 1] ?? 0;
-  const framesOver25 = frames.filter((f) => f.ms > 25.0).length;
+  const framesOver25 = frames.filter((f) => f.ms > CONFIG.perf_max_frame_ms).length;
 
   const sppHist: Record<number, number> = {};
   for (const f of frames) sppHist[f.spp] = (sppHist[f.spp] ?? 0) + 1;
@@ -394,7 +394,7 @@ export function generateReportMarkdown(
     const curTextRatio = textSizes.length > 1 ? textSizes[textSizes.length - 1]! / Math.max(0.1, textSizes[0]!) : 1.0;
     const curSig = frames.length ? frames.reduce((a, b) => a + b.signal_pct, 0) / frames.length : 0;
     const curEdge = frames.length ? frames.reduce((a, b) => a + b.edge_density, 0) / frames.length : 0;
-    const deadFrames = frames.filter((f) => f.E < 0.001).length;
+    const deadFrames = frames.filter((f) => f.E < CONFIG.eps_energy).length;
     const curDeadFrac = frames.length ? deadFrames / frames.length : 0;
 
     const metricsToCompare: { name: string; key?: string; val: number; refVal?: number }[] = [

@@ -56,15 +56,22 @@ const otCache = new Map<string, opentype.Font>();
 const bufCache = new Map<string, ArrayBuffer>();
 
 export async function loadFonts(): Promise<void> {
-  await Promise.all(
+  // Per-font resilience: one 404 or corrupt file must not take down the other ~40 faces.
+  const results = await Promise.allSettled(
     DEFS.map(async (d) => {
-      const buf = await (await fetch(`fonts/${d.file}`)).arrayBuffer();
+      const res = await fetch(`fonts/${d.file}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status} for fonts/${d.file}`);
+      const buf = await res.arrayBuffer();
       bufCache.set(d.family, buf);
       const ff = new FontFace(d.family, buf, d.features ? { featureSettings: d.features } : undefined);
       await ff.load();
       document.fonts.add(ff);
     }),
   );
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i]!;
+    if (r.status === 'rejected') console.warn(`[type] Font '${DEFS[i]!.family}' failed to load (${r.reason}); falling back to system fonts for that face.`);
+  }
   await document.fonts.ready;
 }
 

@@ -20,13 +20,17 @@ export function parsePalette(paletteArg?: string): PaletteEntry[] {
   ];
   const list = paletteArg
     ? paletteArg.split(',').map((part) => {
-        const [name, hex] = part.split('=');
-        return { name: name!.trim(), hex: hex!.trim() };
+        const eq = part.indexOf('=');
+        if (eq < 0) throw new Error(`[palette] Malformed entry '${part.trim()}' — expected name=#RRGGBB.`);
+        const name = part.slice(0, eq), hex = part.slice(eq + 1);
+        if (!name.trim() || !/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(hex.trim())) throw new Error(`[palette] Malformed entry '${part.trim()}' — expected name=#RRGGBB (3 or 6 hex digits).`);
+        return { name: name.trim(), hex: hex.trim() };
       })
     : defaultEntries;
 
   return list.map((e) => {
-    const hex = e.hex.replace('#', '');
+    let hex = e.hex.replace('#', '');
+    if (/^[0-9a-fA-F]{3}$/.test(hex)) hex = hex.split('').map((c) => c + c).join('');
     const r = parseInt(hex.substring(0, 2), 16);
     const g = parseInt(hex.substring(2, 4), 16);
     const b = parseInt(hex.substring(4, 6), 16);
@@ -76,7 +80,8 @@ export function deltaE76(lab1: [number, number, number], lab2: [number, number, 
   return Math.sqrt(dL * dL + da * da + db * db);
 }
 
-// 4x4 Box-filter downscale from (pw, ph) to (480, 270) with vertical flip
+// 4x4 Box-filter downscale from (pw, ph) to (480, 270) with vertical flip.
+// Clamped for odd sizes (exact 1920/480=4 fast path; generic sizes clamp edges).
 export function downscaleFrame(
   src: Uint8Array,
   pw: number,
@@ -84,34 +89,35 @@ export function downscaleFrame(
   outW = 480,
   outH = 270
 ): Uint8Array {
+  if (pw < outW || ph < outH) throw new Error(`[downscale] source ${pw}x${ph} smaller than ${outW}x${outH}`);
   const out = new Uint8Array(outW * outH * 4);
-  const blockW = Math.round(pw / outW);
-  const blockH = Math.round(ph / outH);
-  const numPixels = blockW * blockH;
+  const blockW = Math.max(1, Math.floor(pw / outW));
+  const blockH = Math.max(1, Math.floor(ph / outH));
 
   for (let oy = 0; oy < outH; oy++) {
     // Invert Y because WebGL readPixels is bottom-up
     const iyBase = (ph - 1) - (oy * blockH);
     for (let ox = 0; ox < outW; ox++) {
       const ixBase = ox * blockW;
-      let rSum = 0, gSum = 0, bSum = 0;
+      let rSum = 0, gSum = 0, bSum = 0, count = 0;
 
       for (let dy = 0; dy < blockH; dy++) {
-        const iy = iyBase - dy;
+        const iy = Math.min(ph - 1, Math.max(0, iyBase - dy));
         const rowOffset = iy * pw * 4;
         for (let dx = 0; dx < blockW; dx++) {
-          const ix = ixBase + dx;
+          const ix = Math.min(pw - 1, ixBase + dx);
           const idx = rowOffset + ix * 4;
-          rSum += src[idx]!;
-          gSum += src[idx + 1]!;
-          bSum += src[idx + 2]!;
+          rSum += src[idx] ?? 0;
+          gSum += src[idx + 1] ?? 0;
+          bSum += src[idx + 2] ?? 0;
+          count++;
         }
       }
 
       const outIdx = (oy * outW + ox) * 4;
-      out[outIdx] = Math.round(rSum / numPixels);
-      out[outIdx + 1] = Math.round(gSum / numPixels);
-      out[outIdx + 2] = Math.round(bSum / numPixels);
+      out[outIdx] = Math.round(rSum / Math.max(1, count));
+      out[outIdx + 1] = Math.round(gSum / Math.max(1, count));
+      out[outIdx + 2] = Math.round(bSum / Math.max(1, count));
       out[outIdx + 3] = 255;
     }
   }
@@ -184,7 +190,7 @@ export function computeLumaAndContrast(luma: Float32Array): { lumaMean: number; 
   return { lumaMean: mean, contrast: std, contrastMichelson: michelson };
 }
 
-// Sobel edge density (% pixels where G > 0.12) and edge map
+// Sobel edge density (% interior pixels where G > 0.12; 1px border excluded from denominator).
 export function computeSobelEdges(luma: Float32Array, w = 480, h = 270): { edgeDensity: number; edgeMap: Float32Array } {
   const edgeMap = new Float32Array(w * h);
   let count = 0;
@@ -208,7 +214,7 @@ export function computeSobelEdges(luma: Float32Array, w = 480, h = 270): { edgeD
     }
   }
 
-  return { edgeDensity: count / (w * h), edgeMap };
+  return { edgeDensity: count / Math.max(1, (w - 2) * (h - 2)), edgeMap };
 }
 
 // Signal and bright non-signal pixel percentage
@@ -267,6 +273,7 @@ export function computePaletteShares(
   const total = w * h;
   const counts: Record<string, number> = {};
   for (const p of palette) counts[p.name] = 0;
+  if (palette.length === 0) return { shares: {}, otherPct: 100 };
   let otherCount = 0;
 
   // Process pixels (step in x and y for fast deterministic estimation)

@@ -1,7 +1,9 @@
 import { defineConfig } from 'vite';
 import path from 'node:path';
 
-// The repo root holds audio/ and data/; serve them next to the app.
+// The app serves audio/data next to the app. NOTE: repo-root allow is intentionally broad
+// until audio assets are vendored (ROOT/audio/*.mp3 + public/audio/pdoom.mp3 both missing —
+// player/render guard missing files). Narrow to [app, app/public, calibration] once vendored.
 export default defineConfig({
   root: '.',
   publicDir: 'public',

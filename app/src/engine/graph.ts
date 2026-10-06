@@ -144,7 +144,7 @@ export class CompositorGraph {
       const rt = this.getRT(l.name, true);
       const prevRT = renderer.getRenderTarget();
       renderer.setRenderTarget(rt);
-      renderer.setClearColor(0x000000, 0);
+      if (typeof (renderer as any).setClearColor === "function") (renderer as any).setClearColor(0x000000, 0);
       renderer.clear(true, true, true);
       l.render(rt);
       renderer.setRenderTarget(prevRT);
@@ -157,7 +157,7 @@ export class CompositorGraph {
 
     // Clear accumulator A (transparent black for alpha delivery)
     renderer.setRenderTarget(tempAccumA);
-    renderer.setClearColor(0x000000, 0);
+    if (typeof (renderer as any).setClearColor === "function") (renderer as any).setClearColor(0x000000, 0);
     renderer.clear(true, true, true);
 
     let currentAccum = tempAccumA;

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+// Canonical entry is bun scripts/<tool>.ts (root, cwd=app). This shim exists for bun app/scripts/<tool>.ts direct use.
 import { spawn } from 'bun';
 import path from 'node:path';
 
@@ -8,3 +9,4 @@ const proc = spawn([process.execPath, renderScript, 'stitch', ...process.argv.sl
 });
 const exitCode = await proc.exited;
 process.exit(exitCode);
+

@@ -81,7 +81,13 @@ export class AudioDriver implements TimelineDriver {
         isBeat: phase < 0.05,
         intensity: Math.exp(-phase * 4.0),
         data: {
-          rms: this.audioData.rmsAt ? this.audioData.rmsAt(clampedT) : 0,
+          rms: typeof this.audioData.rmsAt === 'function'
+            ? this.audioData.rmsAt(clampedT)
+            : typeof this.audioData.env === 'function'
+              ? this.audioData.env('rms', clampedT)
+              : typeof this.audioData.sample === 'function'
+                ? this.audioData.sample(clampedT).rms ?? 0
+                : 0,
         },
       };
     }

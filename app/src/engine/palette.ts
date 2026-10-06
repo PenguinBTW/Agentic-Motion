@@ -26,7 +26,9 @@ export const LIN: Record<PaletteKey | string, [number, number, number]> = new Pr
 /** CSS rgba() for Canvas2D, evaluating dynamically from active tokens. */
 export function rgba(key: PaletteKey | string, a = 1): string {
   const tokens = getDesignTokens();
-  const hex = tokens.palette[key] ?? (HEX as Record<string, string>)[key] ?? (key.startsWith('#') ? key : '#FFFFFF');
+  let hex: string = tokens.palette[key] ?? (HEX as Record<string, string>)[key] ?? (key.startsWith('#') ? key : '#FFFFFF');
+  const short = /^#([0-9a-fA-F]{3})$/.exec(hex);
+  if (short) hex = '#' + short[1]!.split('').map((c) => c + c).join('');
   const n = parseInt(hex.replace('#', ''), 16);
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }

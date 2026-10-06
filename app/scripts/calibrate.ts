@@ -21,16 +21,26 @@ import { analyzeTextProbes } from './motion/text-analyzer';
 import { type MetricDistribution, type CalibrationData } from './motion/config';
 
 const argv = process.argv.slice(2);
-const opt = (k: string, d?: string) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? argv[i + 1] : d; };
+const isFlagVal = (v?: string) => v !== undefined && !v.startsWith('--');
+const opt = (k: string, d?: string) => { const i = argv.indexOf(`--${k}`); const v = i >= 0 ? argv[i + 1] : d; return isFlagVal(v) ? v : (i >= 0 ? undefined : d); };
+const numOpt = (k: string, def: number, min?: number, max?: number): number => {
+  const raw = opt(k);
+  if (raw === undefined) return def;
+  const v = +raw;
+  if (!Number.isFinite(v)) { console.warn(`[calibrate] Invalid --${k} '${raw}', defaulting to ${def}`); return def; }
+  if (min !== undefined && v < min) return min;
+  if (max !== undefined && v > max) return max;
+  return v;
+};
 const flag = (k: string) => argv.includes(`--${k}`);
 
 const APP = path.resolve(import.meta.dir, '..');
 const REF_APP = path.resolve(opt('ref-dir', path.resolve(APP, '../../Example project/app'))!);
 const OUT_DIR = path.resolve(APP, '../calibration');
 const OUT_FILE = path.resolve(opt('out', path.join(OUT_DIR, 'example.json'))!);
-const FPS = Math.max(15, Math.min(60, +opt('fps', '60')!));
-const MAX_S_PER_PLATE = flag('full') ? Infinity : +opt('max-s', '2.5')!;
-const PORT = +opt('port', '5188')!;
+const FPS = numOpt('fps', 60, 15, 60);
+const MAX_S_PER_PLATE = flag('full') ? Infinity : numOpt('max-s', 2.5, 0.1, 600);
+const PORT = Math.round(numOpt('port', 5188, 1, 65535));
 
 console.log(`[calibrate] Reference app: ${REF_APP}`);
 console.log(`[calibrate] Target output: ${OUT_FILE}`);
@@ -152,26 +162,32 @@ try {
       const x0 = x - left, x1 = x + right;
       const y0 = y - ascent, y1 = y + descent;
       const m = ctx.getTransform();
+      // Scale-aware to match live hook (main.ts): divide by P.scale unless _isScaled.
+      const P = (window as any).__pdoom;
+      const div = ctx._isScaled ? 1 : (P?.scale || 1);
+      const a = m.a / div, b = m.b / div, cc = m.c / div, d = m.d / div, e = m.e / div, f = m.f / div;
       const pts = [
-        [m.a * x0 + m.c * y0 + m.e, m.b * x0 + m.d * y0 + m.f],
-        [m.a * x1 + m.c * y0 + m.e, m.b * x1 + m.d * y0 + m.f],
-        [m.a * x1 + m.c * y1 + m.e, m.b * x1 + m.d * y1 + m.f],
-        [m.a * x0 + m.c * y1 + m.e, m.b * x0 + m.d * y1 + m.f],
+        [a * x0 + cc * y0 + e, b * x0 + d * y0 + f],
+        [a * x1 + cc * y0 + e, b * x1 + d * y0 + f],
+        [a * x1 + cc * y1 + e, b * x1 + d * y1 + f],
+        [a * x0 + cc * y1 + e, b * x0 + d * y1 + f],
       ];
       const minX = Math.min(pts[0]![0]!, pts[1]![0]!, pts[2]![0]!, pts[3]![0]!);
       const maxX = Math.max(pts[0]![0]!, pts[1]![0]!, pts[2]![0]!, pts[3]![0]!);
       const minY = Math.min(pts[0]![1]!, pts[1]![1]!, pts[2]![1]!, pts[3]![1]!);
       const maxY = Math.max(pts[0]![1]!, pts[1]![1]!, pts[2]![1]!, pts[3]![1]!);
-      const hPct = ((maxY - minY) / 1080) * 100;
+      const capHeight = ascent * Math.hypot(cc, d);
+      const hPct = (capHeight / 1080) * 100;
+      const layerId = ctx._layerId || ctx.canvas?._layerId || ctx.canvas?.id || 'layer2d';
       (window as any).__pdoom_textProbes.push({
-        frameIdx: (window as any).__pdoom_frameIdx ?? 0,
-        t: (window as any).__pdoom_t ?? 0,
+        frameIdx: P?.currentFrameIdx ?? 0,
+        t: P?.currentTime ?? 0,
         text: str,
         fontFamily,
         fontPx,
         fillStyle: typeof ctx.fillStyle === 'string' ? ctx.fillStyle : '#ffffff',
         globalAlpha: ctx.globalAlpha,
-        layerId: 'layer2d',
+        layerId,
         bbox: [minX, minY, maxX, maxY],
         w: maxX - minX,
         h: maxY - minY,

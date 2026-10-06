@@ -4,6 +4,7 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright-core';
+import { isFlagVal } from '../cli';
 
 export interface CompareOptions {
   scene?: string;
@@ -14,17 +15,14 @@ export interface CompareOptions {
   port?: number;
 }
 
-function isFlagVal(val?: string): boolean {
-  return typeof val === 'string' && !val.startsWith('--');
-}
 
 export function parseCompareArgs(argv: string[]): CompareOptions {
   const opts: CompareOptions = {};
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     if (arg === '--t' && isFlagVal(argv[i + 1])) { const v = parseFloat(argv[++i]!); if (Number.isFinite(v)) opts.t = v; }
-    else if (arg === '--scene' && isFlagVal(argv[i + 1])) { opts.scene = argv[++i]!; }
-    else if (arg === '--ref' && isFlagVal(argv[i + 1])) { opts.refScene = argv[++i]!; }
+    else if ((arg === '--scene' || arg === '--active-scene') && isFlagVal(argv[i + 1])) { opts.scene = argv[++i]!; }
+    else if ((arg === '--ref' || arg === '--ref-scene') && isFlagVal(argv[i + 1])) { opts.refScene = argv[++i]!; }
     else if (arg === '--ref-t' && isFlagVal(argv[i + 1])) { const v = parseFloat(argv[++i]!); if (Number.isFinite(v)) opts.refT = v; }
     else if (arg === '--out' && isFlagVal(argv[i + 1])) { opts.out = argv[++i]!; }
     else if (arg === '--port' && isFlagVal(argv[i + 1])) { const v = parseInt(argv[++i]!, 10); if (Number.isFinite(v)) opts.port = v; }
@@ -51,7 +49,7 @@ export async function runCompare(page: Page, argv: string[] = []): Promise<void>
 
   const ROOT = path.resolve(import.meta.dir, '../../..');
   const defaultOut = path.join(ROOT, 'out/visual/compare');
-  const outDir = path.resolve(opts.out ?? defaultOut);
+  const outDir = opts.out ? (path.isAbsolute(opts.out) ? path.resolve(opts.out) : path.join(ROOT, opts.out)) : path.resolve(defaultOut);
   mkdirSync(outDir, { recursive: true });
 
   console.log(`[compare] Benchmarking active [${activeScene} @ ${activeT.toFixed(2)}s] vs Example [${refScene} @ ${refT.toFixed(2)}s]...`);
@@ -286,3 +284,4 @@ export async function runCompare(page: Page, argv: string[] = []): Promise<void>
   console.log(`[compare] Wrote 50/50 diagonal split wipe (1920x1080): ${splitPath}`);
   console.log(`[compare] Wrote comparison metadata: ${jsonPath}`);
 }
+

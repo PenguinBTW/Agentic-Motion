@@ -278,6 +278,7 @@ export type CalibrationData = Record<string, MetricDistribution>;
 export function loadCalibrationData(customPath?: string): CalibrationData | null {
   const candidatePaths = [
     customPath,
+    path.resolve(import.meta.dir, '../../../calibration/example.json'),
     path.resolve(import.meta.dir, '../../calibration/example.json'),
     path.resolve(import.meta.dir, '../calibration/example.json'),
     path.resolve(process.cwd(), 'calibration/example.json'),

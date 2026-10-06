@@ -297,11 +297,7 @@ export async function renderSlitscan(
       numRows,
       W,
       H,
-      colDataList: centerColumns.map((col) => {
-        let s = '';
-        for (let i = 0; i < col.length; i++) s += String.fromCharCode(col[i]!);
-        return btoa(s);
-      }),
+      colDataList: centerColumns.map((col) => Buffer.from(col).toString('base64')),
     }
   );
 }
@@ -324,9 +320,7 @@ export async function renderRgbTimeComposite(
     rgba[idx + 3] = 255;
   }
 
-  let s = '';
-  for (let i = 0; i < rgba.length; i++) s += String.fromCharCode(rgba[i]!);
-  const b64 = btoa(s);
+  const b64 = Buffer.from(rgba).toString('base64');
 
   return await page.evaluate(
     ({ b64, w, h }) => {
@@ -379,7 +373,7 @@ export async function renderEventStrip(
       const src = document.getElementById('c') as HTMLCanvasElement;
       for (let i = 0; i < cols; i++) {
         const item = tileCaptions[i]!;
-        P.still(item.t);
+        await P.still(item.t, 1, 0);
         const x = pad + i * (tw + pad), y = pad;
         ctx.drawImage(src, x, y, tw, th);
         ctx.fillStyle = '#0A0A0B';

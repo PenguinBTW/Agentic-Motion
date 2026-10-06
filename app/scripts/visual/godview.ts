@@ -5,6 +5,7 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import type { Page } from 'playwright-core';
+import { isFlagVal } from '../cli';
 
 export interface GodViewOptions {
   scene?: string;
@@ -15,9 +16,6 @@ export interface GodViewOptions {
   corridor?: boolean;
 }
 
-function isFlagVal(val?: string): boolean {
-  return typeof val === 'string' && !val.startsWith('--');
-}
 
 export function parseGodViewArgs(argv: string[]): GodViewOptions {
   const opts: GodViewOptions = {};
@@ -51,11 +49,14 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
 
   let from = opts.from;
   let to = opts.to;
+  let usedFallbackRange = false;
   if (from === undefined && to !== undefined) from = Math.max(0, to - 10.0);
   else if (to === undefined && from !== undefined) to = from + 10.0;
   else if (from === undefined && to === undefined) {
+    console.warn('[godview] Unknown scene/range — defaulting to 8.00–18.50s. Pass --scene with timeline match or --from/--to.');
     from = 8.00;
     to = 18.50;
+    usedFallbackRange = true;
   }
   const numSamples = opts.samples ?? 24;
 
@@ -63,7 +64,7 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
 
   const ROOT = path.resolve(import.meta.dir, '../../..');
   const defaultOut = path.join(ROOT, 'out/visual/godview');
-  const outDir = path.resolve(opts.out ?? defaultOut);
+  const outDir = opts.out ? (path.isAbsolute(opts.out) ? path.resolve(opts.out) : path.join(ROOT, opts.out)) : path.resolve(defaultOut);
   mkdirSync(outDir, { recursive: true });
 
   console.log(`[godview] Rendering 3D God-View camera blueprint for [${from.toFixed(2)}–${to.toFixed(2)}s] (${numSamples} samples)...`);
@@ -93,6 +94,7 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
           }
         }
       }
+      let usedSynthetic = !activeSceneObj;
 
       for (let i = 0; i < N; i++) {
         const t = t0 + (i / Math.max(1, N - 1)) * (t1 - t0);
@@ -128,6 +130,12 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
         p1.v = dist / dt;
       }
       if (samples.length > 1) samples[0]!.v = samples[1]!.v;
+      // Actual path length (not padded-bounds span) for honest travel telemetry.
+      let pathLen = 0;
+      for (let i = 1; i < samples.length; i++) {
+        const p0 = samples[i - 1]!, p1 = samples[i]!;
+        pathLen += Math.hypot(p1.x - p0.x, p1.y - p0.y, p1.z - p0.z);
+      }
 
       // Establish coordinate bounding box: corridor scenes keep architectural context
       // (±2.5m, -4/50m, 0/3.6m); generic scenes frame tightly around samples.
@@ -168,7 +176,7 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
       ctx.fillText('PANEL 1: ORTHOGRAPHIC TOP-DOWN BLUEPRINT (XZ PLANE)', pAX + 16, pAY + 24);
 
       // Coordinate mapping functions for Top-Down (X horizontal, Z vertical)
-      const toScreenX = (wx: number) => pAX + pAW / 2 + (wx / (maxX - minX)) * (pAW - 100);
+      const toScreenX = (wx: number) => pAX + 50 + ((wx - minX) / (maxX - minX)) * (pAW - 100);
       const toScreenZ = (wz: number) => pAY + pAH - 40 - ((wz - minZ) / (maxZ - minZ)) * (pAH - 80);
 
       // Draw metric grid lines
@@ -347,6 +355,7 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
 
       return {
         dataUrl: cv.toDataURL('image/png'),
+        syntheticFallback: usedSynthetic,
         summary: {
           scene: sceneName,
           from: t0,
@@ -367,8 +376,11 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
             v: s.v,
           })),
           total_travel_z_m: maxZ - minZ,
+          path_length_m: pathLen,
+          // Redundant legacy aliases (same value, old unit suffix) — kept for compat.
           max_speed_m_s: Math.max(...samples.map((s) => s.v)),
           min_speed_m_s: Math.min(...samples.map((s) => s.v)),
+          // Single clearance definition (raw, negatives = penetration; min_near above clamps for display).
           camera_min_clearance_wall_m: Math.min(...samples.map((s) => 1.8 - Math.abs(s.x))),
           camera_y_range_m: [minY, maxY],
           status: 'analyzed',
@@ -377,6 +389,14 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
     },
     { t0: from, t1: to, N: numSamples, showCorridor, sceneName: opts.scene ?? 'all' }
   );
+  // Mark synthetic fallback Node-side (browser returned syntheticFallback flag).
+  const _synth = (result as any).syntheticFallback;
+  if (_synth || usedFallbackRange) {
+    result.summary.fallback = true;
+    result.summary.status = 'synthetic-fallback';
+    if (usedFallbackRange) console.warn('[godview] Used default range 8.00–18.50s (synthetic-fallback).');
+    if (_synth) console.warn('[godview] Camera unavailable — used analytic template (synthetic-fallback, NOT measured).');
+  }
 
   const base64Data = result.dataUrl.replace(/^data:image\/png;base64,/, '');
   const pngPath = path.join(outDir, 'cam_godview.png');
@@ -388,3 +408,4 @@ export async function runGodView(page: Page, argv: string[] = []): Promise<void>
   console.log(`[godview] Wrote 3D God-View blueprint: ${pngPath}`);
   console.log(`[godview] Wrote kinematic telemetry: ${jsonPath}`);
 }
+

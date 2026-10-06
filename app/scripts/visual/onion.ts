@@ -5,6 +5,7 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import type { Page } from 'playwright-core';
+import { isFlagVal } from '../cli';
 
 export interface OnionOptions {
   scene?: string;
@@ -16,9 +17,6 @@ export interface OnionOptions {
   out?: string;
 }
 
-function isFlagVal(val?: string): boolean {
-  return typeof val === 'string' && !val.startsWith('--');
-}
 
 export function parseOnionArgs(argv: string[]): OnionOptions {
   const opts: OnionOptions = {};
@@ -68,7 +66,7 @@ export async function runOnion(page: Page, argv: string[] = []): Promise<void> {
 
   const ROOT = path.resolve(import.meta.dir, '../../..');
   const defaultOut = path.join(ROOT, 'out/visual/onion');
-  const outDir = path.resolve(opts.out ?? defaultOut);
+  const outDir = opts.out ? (path.isAbsolute(opts.out) ? path.resolve(opts.out) : path.join(ROOT, opts.out)) : path.resolve(defaultOut);
   mkdirSync(outDir, { recursive: true });
 
   console.log(`[onion] Generating multi-exposure motion trail across [${from.toFixed(2)}–${to.toFixed(2)}s] (${numFrames} frames)...`);
@@ -101,8 +99,15 @@ export async function runOnion(page: Page, argv: string[] = []): Promise<void> {
       const capturedCanvases: HTMLCanvasElement[] = [];
       const textCenters: { x: number; y: number; text: string }[] = [];
 
+      // Enable text probe so still() populates P.textProbes for centroid trail.
+      const prevProbe = P.probe;
+      P.probe = true;
+      if (!P.textProbes) P.textProbes = [];
       for (let i = 0; i < N; i++) {
         const t = times[i]!;
+        P.textProbes.length = 0;
+        P.currentTime = t;
+        P.currentFrameIdx = i;
         await P.still(t, 1, 0);
 
         const src = document.getElementById('c') as HTMLCanvasElement;
@@ -114,7 +119,7 @@ export async function runOnion(page: Page, argv: string[] = []): Promise<void> {
         capturedCanvases.push(copyCv);
 
         // Find active hero text centroid if available
-        const probes = (window as any).__pdoom_textProbes || P.textProbes || [];
+        const probes = P.textProbes || [];
         const frameProbes = probes.filter((p: any) => Math.abs(p.t - t) < 0.02 && p.globalAlpha > 0.3);
         if (frameProbes.length > 0) {
           const maxP = frameProbes.reduce((a: any, b: any) => (a.hPct > b.hPct ? a : b));
@@ -123,6 +128,7 @@ export async function runOnion(page: Page, argv: string[] = []): Promise<void> {
           textCenters.push({ x: W / 2, y: H / 2, text: '' });
         }
       }
+      P.probe = prevProbe;
 
       // Composite pass with chromatic time tinting
       // Past frames (cyan): #00D2FF
@@ -259,3 +265,4 @@ export async function runOnion(page: Page, argv: string[] = []): Promise<void> {
   console.log(`[onion] Wrote composite motion trail: ${pngPath}`);
   console.log(`[onion] Wrote summary telemetry: ${jsonPath}`);
 }
+

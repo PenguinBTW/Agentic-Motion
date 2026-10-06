@@ -168,9 +168,11 @@ export function pointAtLength(pts: V2[], L: Float32Array, s: number): { x: numbe
   return { x: lerp(a.x, b.x, u), y: lerp(a.y, b.y, u), angle: Math.atan2(b.y - a.y, b.x - a.x) };
 }
 
-/** Linear-space color from hex (for GL uniforms; applies sRGB->linear). */
+/** Linear-space color from hex (for GL uniforms; applies sRGB->linear). Expands 3-digit shorthand. */
 export function hexToLinear(hex: string): [number, number, number] {
-  const n = parseInt(hex.replace('#', ''), 16);
+  let h = hex.replace('#', '');
+  if (/^[0-9a-fA-F]{3}$/.test(h)) h = h.split('').map((c) => c + c).join('');
+  const n = parseInt(h, 16);
   const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
     const s = v / 255;
     return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);

@@ -33,10 +33,15 @@ const fonts = new Map<StrokeFontName, SFont>();
 export async function loadStrokeFonts() {
   await Promise.all(
     (Object.keys(STROKE_FONTS) as StrokeFontName[]).map(async (k) => {
-      const txt = await (await fetch(`fonts/stroke/${STROKE_FONTS[k]}`)).text();
+      // Per-font resilience: one 404 must not wipe out the other stroke faces.
+      try {
+      const res = await fetch(`fonts/stroke/${STROKE_FONTS[k]}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status} for fonts/stroke/${STROKE_FONTS[k]}`);
+        const txt = await res.text();
       const f = parseSvgFont(txt);
       addTypographic(f);
       fonts.set(k, f);
+      } catch (e) { console.warn(`[stroke] Font '${k}' failed to load (${e}); scenes using it will throw on access.`); }
     }),
   );
 }

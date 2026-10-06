@@ -5,6 +5,7 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import type { Page } from 'playwright-core';
+import { isFlagVal } from '../cli';
 
 export interface StitchOptions {
   fromScene?: string;
@@ -14,9 +15,6 @@ export interface StitchOptions {
   out?: string;
 }
 
-function isFlagVal(val?: string): boolean {
-  return typeof val === 'string' && !val.startsWith('--');
-}
 
 export function parseStitchArgs(argv: string[]): StitchOptions {
   const opts: StitchOptions = {};
@@ -24,6 +22,8 @@ export function parseStitchArgs(argv: string[]): StitchOptions {
     const arg = argv[i]!;
     if (arg === '--t' && isFlagVal(argv[i + 1])) { const v = parseFloat(argv[++i]!); if (Number.isFinite(v)) opts.t = v; }
     else if (arg === '--window' && isFlagVal(argv[i + 1])) { const v = parseFloat(argv[++i]!); if (Number.isFinite(v)) opts.window = v; }
+    else if (arg === '--window-ms' && isFlagVal(argv[i + 1])) { const v = parseFloat(argv[++i]!); if (Number.isFinite(v)) { opts.window = v / 1000; (opts as any).windowExplicit = true; } }
+    else if (arg === '--window-s' && isFlagVal(argv[i + 1])) { const v = parseFloat(argv[++i]!); if (Number.isFinite(v)) { opts.window = v; (opts as any).windowExplicit = true; } }
     else if (arg === '--from-scene' && isFlagVal(argv[i + 1])) { opts.fromScene = argv[++i]!; }
     else if (arg === '--to-scene' && isFlagVal(argv[i + 1])) { opts.toScene = argv[++i]!; }
     else if (arg === '--out' && isFlagVal(argv[i + 1])) { opts.out = argv[++i]!; }
@@ -52,14 +52,20 @@ export async function runStitch(page: Page, argv: string[] = []): Promise<void> 
 
   const ROOT = path.resolve(import.meta.dir, '../../..');
   const defaultOut = path.join(ROOT, 'out/visual/stitch');
-  const outDir = path.resolve(opts.out ?? defaultOut);
+  const outDir = opts.out ? (path.isAbsolute(opts.out) ? path.resolve(opts.out) : path.join(ROOT, opts.out)) : path.resolve(defaultOut);
   mkdirSync(outDir, { recursive: true });
 
   console.log(`[stitch] Inspecting transition seam at t = ${cutT.toFixed(2)}s (from: ${opts.fromScene ?? 'auto'} -> to: ${opts.toScene ?? 'auto'})...`);
 
   const fps = 60;
-  // If window is provided in seconds (e.g. 0.25) or ms, derive frame spacing
-  const winS = opts.window ? (opts.window > 5 ? opts.window / 1000 : opts.window) : (10 / fps);
+  // --window is seconds; --window-ms/--window-s explicit (see parser, sets windowExplicit).
+  // Legacy heuristic applies ONLY to bare --window: values >5 assumed ms.
+  let winS = (10 / fps);
+  if (opts.window !== undefined) {
+    const explicit = (opts as any).windowExplicit;
+    winS = (!explicit && opts.window > 5) ? opts.window / 1000 : opts.window;
+    if (!explicit && opts.window > 5 && opts.window <= 10) console.warn(`[stitch] Ambiguous --window ${opts.window}: interpreted as ${winS}s (ms heuristic). Prefer --window-s/--window-ms.`);
+  }
   const dt = winS / 10;
   const tBefore = cutT - dt;
   const tAfter = cutT;
@@ -213,3 +219,4 @@ export async function runStitch(page: Page, argv: string[] = []): Promise<void> 
   console.log(`[stitch] Wrote 10-frame contact strip: ${stripPath}`);
   console.log(`[stitch] Wrote telemetry summary: ${jsonPath}`);
 }
+

@@ -116,7 +116,9 @@ export class ExportPipeline {
     if (!Number.isFinite(fps) || fps < 15 || fps > 120) errors.push(`Invalid fps ${opts.fps} (15–120)`);
     if (!Number.isFinite(smp) || smp < 1 || smp > 324) errors.push(`Invalid samples ${smp} (1–324)`);
     for (const p of [opts.outPath, (opts as any).audioTrack]) {
-      if (typeof p === 'string' && (/["`\n\r$;|&]/.test(p) || p.includes('..'))) errors.push(`Unsafe path '${p}' (quotes/shell metachars/.. rejected)`);
+      // Shell metachars always rejected. `..` allowed (README documents ../out/);
+      // traversal safety is enforced at the CLI layer via resolveOut (ROOT join).
+      if (typeof p === 'string' && /["`\n\r$;|&]/.test(p)) errors.push(`Unsafe path '${p}' (quotes/shell metachars rejected)`);
     }
 
     return { valid: errors.length === 0, errors };

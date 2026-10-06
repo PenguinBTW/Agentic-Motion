@@ -251,7 +251,10 @@ export function analyzeTextProbes(
     let peakH = 0, meanH = 0, travel = 0, clip = 0;
     let visibleSungCount = 0;
 
-    const totalSungFrames = Math.max(1, Math.round((tw.end - tw.start) * fps) + 1);
+    // Denominator = overlap of sung window with analysis window (edge-truncated words
+    // can never reach 100% otherwise → spurious F01).
+    const overlapStart = Math.max(tw.start, windowFrom), overlapEnd = Math.min(tw.end, windowTo);
+    const totalSungFrames = Math.max(1, Math.round(Math.max(0, overlapEnd - overlapStart) * fps) + 1);
 
     if (matchedRun) {
       firstVis = matchedRun.first_t;
@@ -299,6 +302,7 @@ export function analyzeTextProbes(
 
   // Collisions: pairwise overlap > 2% with alpha > 0.15
   const collisions: CollisionItem[] = [];
+  const collisionByPair = new Map<string, number>();
   for (const fIdx of frameIndices) {
     const frameRecs = recordsByFrame.get(fIdx)!.filter((r) => r.globalAlpha > CONFIG.text_collision_min_alpha);
     for (let i = 0; i < frameRecs.length; i++) {
@@ -331,9 +335,11 @@ export function analyzeTextProbes(
               (1 - (Math.max(0, Math.min(B.bbox[2], 1920) - Math.max(B.bbox[0], 0)) * Math.max(0, Math.min(B.bbox[3], 1080) - Math.max(B.bbox[1], 0))) / (B.w * B.h)) * 100
             );
 
-            // Merge into existing contiguous collision
-            const lastCol = collisions[collisions.length - 1];
-            if (lastCol && lastCol.pair === pairName && Math.abs(A.t - lastCol.t1) <= 1.5 / fps) {
+            // Merge into existing contiguous collision (per-pair map — interleaved pairs
+            // A∩B,C∩D,A∩B no longer split A∩B).
+            const lastIdx = collisionByPair.get(pairName);
+            const lastCol = lastIdx !== undefined ? collisions[lastIdx]! : undefined;
+            if (lastCol && Math.abs(A.t - lastCol.t1) <= 1.5 / fps) {
               lastCol.t1 = A.t;
               lastCol.intersection_pct = Math.max(lastCol.intersection_pct, overlapPct);
               lastCol.clip_pct = Math.max(lastCol.clip_pct, clipPct);
@@ -345,6 +351,7 @@ export function analyzeTextProbes(
                 intersection_pct: overlapPct,
                 clip_pct: clipPct,
               });
+              collisionByPair.set(pairName, collisions.length - 1);
             }
           }
         }

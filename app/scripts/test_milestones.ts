@@ -7,6 +7,7 @@ const testScripts = [
   'test_milestone3.ts',
   'test_milestone4.ts',
   'test_visual_and_telemetry.ts',
+  'test_bugfixes.ts',
 ];
 
 console.log('================================================================');
@@ -19,15 +20,20 @@ let totalFailed = 0;
 for (const script of testScripts) {
   const scriptPath = path.join(import.meta.dir, script);
   console.log(`>>> Running ${script}...`);
-  const res = spawnSync('bun', [scriptPath], { stdio: 'inherit' });
+  // Use current runtime (works on Win without bun on PATH).
+  const res = spawnSync(process.execPath, [scriptPath], { stdio: 'inherit' });
   if (res.status === 0) {
     console.log(`\n[OK] ${script} finished successfully.\n`);
     totalPassed++;
   } else {
-    console.error(`\n[FAIL] ${script} failed with exit code ${res.status}.\n`);
+    console.error(`\n[FAIL] ${script} failed with exit code ${res.status} (${res.error ? (res.error as Error).message : 'see above'}).\n`);
     totalFailed++;
-    process.exit(res.status ?? 1);
   }
+}
+
+if (totalFailed > 0) {
+  console.error(`SUMMARY: ${totalFailed} suite(s) failed, ${totalPassed} passed.`);
+  process.exit(1);
 }
 
 console.log('================================================================');

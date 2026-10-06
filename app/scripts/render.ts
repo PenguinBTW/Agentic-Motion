@@ -8,10 +8,11 @@
 //            --gpu enables AMD AMF hardware video encoding (h264_amf, hevc_amf, av1_amf), offloading CPU load;
 //            --samples N averages N sub-frames per frame over shutter×(1/fps): motion blur + temporal AA;
 //            --samples auto picks the count per frame (4, 12, 36, 108 or 324, see Engine.render)
-//   motion:  bun scripts/render.ts motion [--from 0] [--to 30] [--samples 1] [--shutter 0.5] [--calibrate]
+//   motion:  bun scripts/render.ts motion [--from 0] [--to 30] [--samples 1] [--shutter 0] [--calibrate]
+//            motion defaults shutter 0 (sharp) for metrics; stills/sheet/video/perf default 0.5 (blurred).
 //   onion:   bun scripts/render.ts onion --scene demo --from 1.0 --to 2.0 [--frames 10]
 //   godview: bun scripts/render.ts godview --scene demo [--corridor]
-//   stitch:  bun scripts/render.ts stitch --from-scene sceneA --to-scene sceneB [--window 300]
+//   stitch:  bun scripts/render.ts stitch --from-scene sceneA --to-scene sceneB [--window 300ms|0.3s|--window-ms 300|--window-s 0.3]
 //   compare: bun scripts/render.ts compare --active-scene demo --ref-scene loss
 //   --scale N (all modes): render at N× the 1920x1080 layout (--scale 2 = true 3840x2160); stills are then saved
 //            full-res from the pixel buffer, videos are encoded at the physical size.
@@ -62,20 +63,27 @@ const numOpt = (k: string, def: number, min?: number, max?: number): number => {
 };
 const flag = (k: string) => argv.includes(`--${k}`);
 const APP = path.resolve(import.meta.dir, '..');
+const ROOT = path.resolve(APP, '..');
+const hist = (h: Record<string, number>) => Object.entries(h).sort((a, b) => +a[0] - +b[0]).map(([k, v]) => `${k}:${v}`).join(' ');
+const resolveOut = (p?: string, def?: string) => {
+  const raw = p ?? def!;
+  return path.isAbsolute(raw) ? path.resolve(raw) : path.join(ROOT, raw);
+};
 const SCALE = Math.max(1, Math.round(numOpt('scale', 1, 1, 4)));
 const OW = 1920 * SCALE, OH = 1080 * SCALE; // output size
 // --samples N (fixed) or --samples auto [--min-samples 4] [--max-samples 324] [--tol 3] (adaptive, see Engine.render)
 const SAMPLES = opt('samples', '1') === 'auto'
-  ? { min: +opt('min-samples', '4')!, max: +opt('max-samples', '324')!, tol: +opt('tol', '3')! }
-  : +opt('samples', '1')!;
-const hist = (h: Record<string, number>) => Object.entries(h).sort((a, b) => +a[0] - +b[0]).map(([k, v]) => `${k}:${v}`).join(' ');
-const ROOT = path.resolve(APP, '..');
+  ? { min: numOpt('min-samples', 4, 1, 324), max: numOpt('max-samples', 324, 1, 972), tol: numOpt('tol', 3, 0.1, 50) }
+  : numOpt('samples', 1, 1, 324);
 
 async function reachable(url: string) {
   try { const r = await fetch(url, { signal: AbortSignal.timeout(1500) }); return r.ok; } catch { return false; }
 }
 
 async function ensureServer(): Promise<{ url: string; stop: () => void }> {
+  if (typeof (globalThis as any).Bun === 'undefined') {
+    throw new Error('[server] Bun runtime required (Bun.spawn + Bun.serve). Run with: bun scripts/render.ts ...');
+  }
   const url = opt('url', 'http://localhost:5173')!;
   if (await reachable(url)) return { url, stop: () => {} };
   const port = 5300 + Math.floor(Math.random() * 500);
@@ -83,7 +91,11 @@ async function ensureServer(): Promise<{ url: string; stop: () => void }> {
   const proc = Bun.spawn([process.execPath, 'x', 'vite', '--port', String(port), '--strictPort'], { cwd: APP, stdout: 'ignore', stderr: 'ignore', env: { ...process.env, PDOOM_NO_HMR: '1' } });
   const u = `http://localhost:${port}`;
   for (let i = 0; i < 100 && !(await reachable(u)); i++) await Bun.sleep(100);
-  return { url: u, stop: () => proc.kill() };
+  if (!(await reachable(u))) {
+    try { proc.kill(); } catch {}
+    throw new Error(`[server] Vite failed to start at ${u} (port busy or missing dep) — killed proc`);
+  }
+  return { url: u, stop: () => { try { proc.kill(); } catch {} } };
 }
 
 async function openPage(url: string) {
@@ -98,7 +110,11 @@ async function openPage(url: string) {
       channel: 'chrome',
     });
   } catch {
-    browser = await chromium.launch(launchOpts);
+    try {
+      browser = await chromium.launch(launchOpts);
+    } catch (e: any) {
+      throw new Error(`[browser] No Chromium/Chrome found (playwright-core ships no browsers). Install system Chrome or run: bunx playwright install chromium. Underlying: ${e?.message ?? e}`);
+    }
   }
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
   const logs: string[] = [];
@@ -109,10 +125,12 @@ async function openPage(url: string) {
   if (onlyRaw) {
     const rawParts = onlyRaw.split(',');
     const expanded = new Set<string>(rawParts);
+    // plates.json override shape {id:seconds} — both legacy paths absent (verified); warn once.
     const platesPath = path.resolve(APP, '../analysis/plates.json');
-    if (existsSync(platesPath)) {
+    const platesAlt = path.join(APP, 'plates.json');
+    if (existsSync(platesPath) || existsSync(platesAlt)) {
       try {
-        const pList = JSON.parse(await Bun.file(platesPath).text());
+        const pList = JSON.parse(await Bun.file(existsSync(platesPath) ? platesPath : platesAlt).text());
         for (const part of rawParts) {
           for (const p of pList) {
             if (p.id === part || p.file === part) {
@@ -122,6 +140,8 @@ async function openPage(url: string) {
           }
         }
       } catch {}
+    } else {
+      console.warn('[plates] No plates.json override found (checked analysis/ + app/); using --only ids directly.');
     }
     only = Array.from(expanded).join(',');
   }
@@ -140,7 +160,7 @@ async function stills(page: Page, times: number[], outDir: string) {
   mkdirSync(outDir, { recursive: true });
   const files: string[] = [];
   for (const t of times) {
-    const k: number = await page.evaluate(([t, s, sh]) => (window as any).__pdoom.still(t, s, sh), [t, SAMPLES, +opt('shutter', '0.5')!] as const);
+    const k: number = await page.evaluate(([t, s, sh]) => (window as any).__pdoom.still(t, s, sh), [t, SAMPLES, numOpt('shutter', 0.5, 0, 1)] as const);
     const f = path.join(outDir, `f_${t.toFixed(2).padStart(7, '0')}.png`);
     if (typeof SAMPLES !== 'number') console.log(`t=${t}: ${k} sub-frames`);
     // at scale > 1 the canvas is shown downscaled on the page: save the full-res pixel buffer instead
@@ -152,7 +172,7 @@ async function stills(page: Page, times: number[], outDir: string) {
 }
 
 async function sheet(page: Page, times: number[], cols: number, out: string) {
-  const shutter = +opt('shutter', '0.5')!;
+  const shutter = numOpt('shutter', 0.5, 0, 1);
   const dataUrl: string = await page.evaluate(async ({ times, cols, samples, shutter }: any) => {
     const P = (window as any).__pdoom;
     const cw = 480, ch = 270, pad = 4, lab = 18;
@@ -214,10 +234,17 @@ async function video(page: Page, from: number, to: number, fps: number, out: str
       },
     },
   });
-  const used: Record<string, number> = await page.evaluate((o) => (window as any).__pdoom.stream(o), { from, to, fps, ws: `ws://localhost:${server.port}`, samples: SAMPLES, shutter: +opt('shutter', '0.5')!, inflight: 4 });
-  // wait for all frames to arrive
-  while (frames < total) await Bun.sleep(20);
-  ff.stdin.end();
+  const used: Record<string, number> = await page.evaluate((o) => (window as any).__pdoom.stream(o), { from, to, fps, ws: `ws://localhost:${server.port}`, samples: SAMPLES, shutter: numOpt('shutter', 0.5, 0, 1), inflight: 4 });
+  // wait for all frames to arrive (bounded: 60s + 2s/frame, cleanup on timeout)
+  const deadline = performance.now() + 60000 + total * 2000;
+  try {
+    while (frames < total) {
+      if (performance.now() > deadline) throw new Error(`[video] stream timeout: ${frames}/${total} frames (WS drop or fps rounding mismatch)`);
+      await Bun.sleep(20);
+    }
+  } finally {
+    try { ff.stdin.end(); } catch {}
+  }
   await ff.exited;
   server.stop();
   console.log(`\nwrote ${out} (${frames} frames in ${((performance.now() - t0) / 1000).toFixed(1)}s)`);
@@ -262,7 +289,7 @@ async function motion(page: Page) {
     : [-0.2, -0.1, 0, 0.05, 0.1, 0.2, 0.4];
 
   const comparePath = opt('compare');
-  const outDir = path.resolve(opt('out', path.join(ROOT, 'out/motion/doors-v3'))!);
+  const outDir = resolveOut(opt('out'), path.join(ROOT, 'out/motion/doors-v3'));
   mkdirSync(outDir, { recursive: true });
   mkdirSync(path.join(outDir, 'events'), { recursive: true });
 
@@ -329,6 +356,7 @@ async function motion(page: Page) {
   const calibrationData = loadCalibrationData(calibrationPath);
 
   const totalFrames = Math.round(to * fps) - Math.round(from * fps);
+  const motionDeadline = performance.now() + 60000 + Math.max(0, totalFrames) * 2000;
   const frames480: Uint8Array[] = [];
   const centerCols: Uint8Array[] = [];
   let frameCount = 0;
@@ -371,8 +399,14 @@ async function motion(page: Page) {
     probe: true,
   });
 
-  while (frameCount < totalFrames) await Bun.sleep(10);
-  server.stop();
+  while (frameCount < totalFrames) {
+    if (performance.now() > motionDeadline) {
+      try { server.stop(); } catch {}
+      throw new Error(`[motion] stream timeout: ${frameCount}/${totalFrames} frames (WS drop or fps rounding mismatch)`);
+    }
+    await Bun.sleep(10);
+  }
+  try { server.stop(); } catch {}
 
   const wallClockSec = (performance.now() - tStart) / 1000;
   console.log(`[motion] Rendered ${frameCount} frames in ${wallClockSec.toFixed(2)}s (${(frameCount / wallClockSec).toFixed(1)} fps)`);
@@ -586,7 +620,7 @@ async function motion(page: Page) {
   }
 
   console.log('[motion] Evaluating rule-based flags (F01–F16)...');
-  const flags = evaluateFlags(frameMetrics, textAnalysis, cutsList, hitsList, allowBlankRanges, allEvents, calibrationData, waivers);
+  const flags = evaluateFlags(frameMetrics, textAnalysis, cutsList, hitsList, allowBlankRanges, allEvents, calibrationData, waivers, fps);
 
   console.log('[motion] Rendering diagnostic images...');
   const evidenceFiles: { name: string; content: string; whenToOpen: string }[] = [];
@@ -732,24 +766,29 @@ try {
       return ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
     }));
   } else if (mode === 'stills') {
-    const times = (opt('t') ?? '0').split(',').map(Number);
-    const files = await stills(page, times, opt('out', path.join(ROOT, 'out/stills'))!);
+    const times = (opt('t') ?? '0').split(',').map(Number).filter(Number.isFinite);
+    if (!times.length) throw new Error('[stills] No valid --t times (got NaN). Pass comma-separated seconds.');
+    const files = await stills(page, times, resolveOut(opt('out'), path.join(ROOT, 'out/stills')));
     console.log(files.join('\n'));
   } else if (mode === 'sheet') {
-    const from = +opt('from', '0')!, to = +opt('to', '10')!, n = +opt('n', '12')!;
+    const from = numOpt('from', 0, 0), to = numOpt('to', 10, 0), n = Math.round(numOpt('n', 12, 1, 200));
     let times = Array.from({ length: n }, (_, i) => from + ((to - from) * i) / Math.max(1, n - 1));
-    if (opt('times')) times = opt('times')!.split(',').map(Number);
+    if (opt('times')) {
+      times = opt('times')!.split(',').map(Number).filter(Number.isFinite);
+      if (!times.length) throw new Error('[sheet] No valid --times (got NaN).');
+    }
     if (flag('cuts')) {
       // 4 frames around every timeline boundary: 2 frames before, 2 after
       const tl: { id: string; start: number }[] = await page.evaluate(() => (window as any).__pdoom.timeline);
       times = tl.slice(1).flatMap((e) => [e.start - 0.1, e.start - 1 / 60, e.start + 1 / 60, e.start + 0.1]);
     }
-    const out = opt('out', path.join(ROOT, `out/sheets/sheet_${from}-${to}.png`))!;
-    await sheet(page, times, +opt('cols', '4')!, out);
+    const out = resolveOut(opt('out'), path.join(ROOT, `out/sheets/sheet_${from}-${to}.png`));
+    await sheet(page, times, Math.round(numOpt('cols', 4, 1, 16)), out);
     console.log(out);
   } else if (mode === 'plates') {
     const tl: { id: string; start: number; end: number }[] = await page.evaluate(() => (window as any).__pdoom.timeline);
-    const figs = ['open', 'loss', 'room', 'shoggoth', 'spacetime', 'ascent', 'bureau', 'leftturn', 'paperclips', 'fuse', 'stack', 'dense', 'loom', 'ilya'];
+    const legacyFigs = ['open', 'loss', 'room', 'shoggoth', 'spacetime', 'ascent', 'bureau', 'leftturn', 'paperclips', 'fuse', 'stack', 'dense', 'loom', 'ilya'];
+    const figs = tl.some((x) => legacyFigs.includes(x.id)) ? legacyFigs : tl.map((x) => x.id);
     const overrides: Record<string, number> = existsSync(path.join(APP, 'plates.json')) ? await Bun.file(path.join(APP, 'plates.json')).json() : {};
     const dir = path.join(APP, 'public/plates');
     mkdirSync(dir, { recursive: true });
@@ -759,12 +798,20 @@ try {
       if (!e) continue;
       const t = overrides[figs[i]!] ?? (e.start + e.end) / 2;
       await page.evaluate((t) => (window as any).__pdoom.still(t, 4, 0.2), t);
-      const f = path.join(dir, `fig${String(i + 1).padStart(2, '0')}.jpg`);
-      await page.screenshot({ path: f, type: 'jpeg', quality: 90, clip: { x: 0, y: 0, width: 1920, height: 1080 } });
+      const f = path.join(dir, `fig${String(i + 1).padStart(2, '0')}.${SCALE !== 1 ? 'png' : 'jpg'}`);
+      if (SCALE !== 1) {
+        // Full-res pixel buffer at SCALE (matches stills path); downscale via canvas for jpeg.
+        const b64: string = await page.evaluate(() => (window as any).__pdoom.png());
+        await Bun.write(f, Buffer.from(b64, 'base64'));
+      } else {
+        await page.screenshot({ path: f, type: 'jpeg', quality: 90, clip: { x: 0, y: 0, width: OW, height: OH } });
+      }
       console.log(f, t.toFixed(2));
     }
   } else if (mode === 'perf') {
-    const from = +opt('from', '0')!, to = +opt('to', '5')!;
+    const from = numOpt('from', 0, 0);
+    let to = numOpt('to', 5, 0);
+    if (to <= from) { console.warn(`[perf] Empty window (to<=from), expanding to from+1s`); to = from + 1; }
     const r = await page.evaluate(async ({ from, to, samples, shutter }) => {
       const P = (window as any).__pdoom;
       const ms: number[] = [];
@@ -780,11 +827,14 @@ try {
       }
       ms.sort((a, b) => a - b);
       return { n: ms.length, avg: ms.reduce((a, b) => a + b, 0) / ms.length, p50: ms[ms.length >> 1], p95: ms[Math.floor(ms.length * 0.95)], max: ms[ms.length - 1], used };
-    }, { from, to, samples: SAMPLES, shutter: +opt('shutter', '0.5')! });
+    }, { from, to, samples: SAMPLES, shutter: numOpt('shutter', 0.5, 0, 1) });
     console.log(`frames ${r.n}  avg ${r.avg.toFixed(1)}ms  p50 ${r.p50.toFixed(1)}  p95 ${r.p95.toFixed(1)}  max ${r.max.toFixed(1)}  sub-frames ${hist(r.used)}`);
   } else if (mode === 'video') {
     const dur: number = await page.evaluate(() => (window as any).__pdoom.duration);
-    await video(page, +opt('from', '0')!, +opt('to', String(dur))!, +opt('fps', '60')!, path.resolve(opt('out', path.join(ROOT, 'out/whos-holding-on-to-who.mp4'))!));
+    const vFrom = numOpt('from', 0, 0);
+    let vTo = numOpt('to', dur, 0);
+    if (vTo <= vFrom) { console.warn(`[video] Empty window (to<=from), expanding to from+1s`); vTo = vFrom + 1; }
+    await video(page, vFrom, vTo, numOpt('fps', 60, 15, 120), resolveOut(opt('out'), path.join(ROOT, 'out/whos-holding-on-to-who.mp4')));
   } else if (mode === 'motion') {
     await motion(page);
   } else if (mode === 'onion') {

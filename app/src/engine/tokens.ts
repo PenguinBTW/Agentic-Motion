@@ -107,7 +107,9 @@ export function tokenToLinear(key: string): [number, number, number] {
 /** Get CSS rgba from active palette token or raw hex */
 export function tokenToRgba(key: string, a = 1): string {
   const rawHex = activeTokens.palette[key] ?? (key.startsWith('#') ? key : '#FFFFFF');
-  const hex = rawHex.replace('#', '');
-  const n = parseInt(hex, 16);
+  let hex = rawHex.replace('#', '');
+  if (/^[0-9a-fA-F]{3}$/.test(hex)) hex = hex.split('').map((c) => c + c).join('');
+  let n = parseInt(hex, 16);
+  if (!Number.isFinite(n)) n = 0xffffff;
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }

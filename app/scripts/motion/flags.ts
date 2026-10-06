@@ -44,9 +44,13 @@ export function evaluateFlags(
   allowBlankRanges: [number, number][],
   audioEvents: AudioEvent[] = [],
   calibration: CalibrationData | null = null,
-  waivers: Record<string, string> = {}
+  waivers: Record<string, string> = {},
+  fps = 60
 ): FlagItem[] {
   if (frames.length === 0) return [];
+  // k consecutive frames at fps occupy k/fps seconds (frame times span (k-1)/fps).
+  const frameDt = 1 / Math.max(1, fps);
+  const runDur = (startIdx: number, endIdx: number) => (endIdx - startIdx + 1) * frameDt;
 
   const flags: FlagItem[] = [];
   const flagCounters: Record<string, number> = {};
@@ -63,8 +67,12 @@ export function evaluateFlags(
     const meta = FLAG_RULES[rule]!;
     const count = (flagCounters[rule] ?? 0) + 1;
     flagCounters[rule] = count;
-    const id = `${rule}-${String(count).padStart(3, '0')}`;
-    const waiverReason = waivers[id] ?? waivers[rule] ?? null;
+    // Stable content-addressed ID (rule + quantized window) so prior-findings waivers
+    // survive reordering; positional counter kept as tiebreak suffix.
+    const q = (t: number) => Math.round(t * 100);
+    const id = `${rule}-${q(t0)}-${q(t1)}-${String(count).padStart(3, '0')}`;
+    // Waiver match: exact ID, legacy positional (F08-001), rule-wide, or content key.
+    const waiverReason = waivers[id] ?? waivers[`${rule}-${String(count).padStart(3, '0')}`] ?? waivers[`${rule}-${q(t0)}-${q(t1)}`] ?? waivers[rule] ?? null;
     const waived = Boolean(waiverReason);
     flags.push({
       id,
@@ -267,51 +275,35 @@ export function evaluateFlags(
   }
 
   // F08: dead motion: motion energy < eps for > 0.5 s (uncalibrated proxy, excluding flash/invert windows)
+  // Flash-interrupted runs are closed+emitted (not silently discarded); report §8 documents raw unfiltered.
+  const emitDeadRun = (startIdx: number, endIdx: number) => {
+    const dur = runDur(startIdx, endIdx);
+    if (dur < CONFIG.dead_motion_s) return;
+    let sumE = 0;
+    for (let k = startIdx; k <= endIdx; k++) sumE += frames[k]!.E;
+    addFlag(
+      'F08',
+      'info',
+      frames[startIdx]!.t,
+      frames[endIdx]!.t,
+      `motion energy E < ${CONFIG.eps_energy} for ${dur.toFixed(2)}s (mean E = ${(sumE / (endIdx - startIdx + 1)).toFixed(5)}; uncalibrated proxy)`,
+      false
+    );
+  };
   let deadStartIdx = -1;
   for (let i = 0; i < frames.length; i++) {
     const f = frames[i]!;
     if (isInFlashWindow(f.t)) {
-      if (deadStartIdx >= 0) {
-        deadStartIdx = -1;
-      }
+      if (deadStartIdx >= 0) { emitDeadRun(deadStartIdx, i - 1); deadStartIdx = -1; }
       continue;
     }
     if (f.E < CONFIG.eps_energy) {
       if (deadStartIdx < 0) deadStartIdx = i;
     } else {
-      if (deadStartIdx >= 0) {
-        const dur = frames[i - 1]!.t - frames[deadStartIdx]!.t;
-        if (dur >= CONFIG.dead_motion_s) {
-          let sumE = 0;
-          for (let k = deadStartIdx; k < i; k++) sumE += frames[k]!.E;
-          addFlag(
-            'F08',
-            'info',
-            frames[deadStartIdx]!.t,
-            frames[i - 1]!.t,
-            `motion energy E < ${CONFIG.eps_energy} for ${dur.toFixed(2)}s (mean E = ${(sumE / (i - deadStartIdx)).toFixed(5)}; uncalibrated proxy)`,
-            false
-          );
-        }
-        deadStartIdx = -1;
-      }
+      if (deadStartIdx >= 0) { emitDeadRun(deadStartIdx, i - 1); deadStartIdx = -1; }
     }
   }
-  if (deadStartIdx >= 0) {
-    const dur = frames[frames.length - 1]!.t - frames[deadStartIdx]!.t;
-    if (dur >= CONFIG.dead_motion_s) {
-      let sumE = 0;
-      for (let k = deadStartIdx; k < frames.length; k++) sumE += frames[k]!.E;
-      addFlag(
-        'F08',
-        'info',
-        frames[deadStartIdx]!.t,
-        frames[frames.length - 1]!.t,
-        `motion energy E < ${CONFIG.eps_energy} for ${dur.toFixed(2)}s (mean E = ${(sumE / (frames.length - deadStartIdx)).toFixed(5)}; uncalibrated proxy)`,
-        false
-      );
-    }
-  }
+  if (deadStartIdx >= 0) emitDeadRun(deadStartIdx, frames.length - 1);
 
   // -------------------------------------------------------------
   // TIER B (Calibrated): F09 (Audio hit response ratio)
@@ -578,6 +570,23 @@ export function evaluateFlags(
   // -------------------------------------------------------------
 
   // F16: near-black or near-white run > 0.3 s outside --allow-blank
+  // allow-blank is an overlap whitelist (not full containment); kind resets on change.
+  const blankAllowed = (t0: number, t1: number) =>
+    allowBlankRanges.some(([b0, b1]) => t0 <= b1 + 0.05 && t1 >= b0 - 0.05);
+  const emitBlank = (startIdx: number, endIdx: number, kind: string) => {
+    const t0 = frames[startIdx]!.t, t1 = frames[endIdx]!.t;
+    const dur = runDur(startIdx, endIdx);
+    if (dur < CONFIG.blank_max_run_s) return;
+    if (blankAllowed(t0, t1)) return;
+    addFlag(
+      'F16',
+      'fail',
+      t0,
+      t1,
+      `near-${kind} segment of ${dur.toFixed(2)}s outside --allow-blank (> ${CONFIG.blank_max_run_s}s)`,
+      false
+    );
+  };
   let blankStart = -1;
   let blankKind = '';
   for (let i = 0; i < frames.length; i++) {
@@ -588,44 +597,12 @@ export function evaluateFlags(
     if (isBlack || isWhite) {
       const curKind = isBlack ? 'black' : 'white';
       if (blankStart < 0) { blankStart = i; blankKind = curKind; }
+      else if (curKind !== blankKind) { emitBlank(blankStart, i - 1, blankKind); blankStart = i; blankKind = curKind; }
     } else {
-      if (blankStart >= 0) {
-        const t0 = frames[blankStart]!.t, t1 = frames[i - 1]!.t;
-        const dur = t1 - t0;
-        if (dur >= CONFIG.blank_max_run_s) {
-          const isAllowed = allowBlankRanges.some(([b0, b1]) => t0 >= b0 - 0.05 && t1 <= b1 + 0.05);
-          if (!isAllowed) {
-            addFlag(
-              'F16',
-              'fail',
-              t0,
-              t1,
-              `near-${blankKind} segment of ${dur.toFixed(2)}s outside --allow-blank (> ${CONFIG.blank_max_run_s}s)`,
-              false
-            );
-          }
-        }
-        blankStart = -1;
-      }
+      if (blankStart >= 0) { emitBlank(blankStart, i - 1, blankKind); blankStart = -1; }
     }
   }
-  if (blankStart >= 0) {
-    const t0 = frames[blankStart]!.t, t1 = frames[frames.length - 1]!.t;
-    const dur = t1 - t0;
-    if (dur >= CONFIG.blank_max_run_s) {
-      const isAllowed = allowBlankRanges.some(([b0, b1]) => t0 >= b0 - 0.05 && t1 <= b1 + 0.05);
-      if (!isAllowed) {
-        addFlag(
-          'F16',
-          'fail',
-          t0,
-          t1,
-          `near-${blankKind} segment of ${dur.toFixed(2)}s outside --allow-blank (> ${CONFIG.blank_max_run_s}s)`,
-          false
-        );
-      }
-    }
-  }
+  if (blankStart >= 0) emitBlank(blankStart, frames.length - 1, blankKind);
 
   // Sort flags: Tier A first (blocking before advisory), then Tier B, then Tier C, then t0
   const tierOrder: Record<string, number> = {
