@@ -1,5 +1,5 @@
 # f(x) Studio
-**This project is licensed under the PolyForm Small Business License 1.0.0 [`LICENSE.md`](./LICENSE.md).. This grants non-commercial parties full use of the software and allows small businesses under the defined revenue and employee thresholds to use it under the same terms.**
+**This project is licensed under the PolyForm Small Business License 1.0.0 [`LICENSE.md`](./LICENSE.MD).. This grants non-commercial parties full use of the software and allows small businesses under the defined revenue and employee thresholds to use it under the same terms.**
 
 **For commerical Licensing beyond these threasholds email *vio@penguinbtw.com***
 
